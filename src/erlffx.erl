@@ -30,28 +30,29 @@
 %% Type Definitions
 %% ------------------------------------------------------------------
 
--type aes_key() :: iodata().
--type tweak() :: iodata().
--type p_value() :: binary().
--type radix() :: 2..255.
--type maginteger() :: {Value :: non_neg_integer(), Magnitude :: non_neg_integer()}.
-
--type config() :: #{ aes_key => aes_key(),
-                     tweak => tweak(),
-                     radix => radix(),
+-type config() :: #{ aes_key => iodata(),
+                     tweak => iodata(),
+                     radix => 2..255,
                      value_length => non_neg_integer(),
                      number_of_rounds => non_neg_integer() }.
+-export_type([config/0]).
+
+-type p_value() :: binary().
+-type maginteger() :: {Value :: non_neg_integer(), Magnitude :: non_neg_integer()}.
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-encrypt(Config, Value) when is_integer(Value) ->
+-spec encrypt(Config, Value) -> EncryptedValue
+        when Config :: config(),
+             Value :: non_neg_integer(),
+             EncryptedValue :: non_neg_integer().
+encrypt(Config, Value) ->
     P = generate_p(Config),
     ?LOG("P value: ~p", [P]),
     #{ radix := Radix,
-       value_length := ValueLength,
-       number_of_rounds := NumberOfRounds } = Config,
+       value_length := ValueLength } = Config,
     L = ?DIV_BY_2(ValueLength + 1),
     InitialA_Magnitude = integer_pow(Radix, ValueLength - L),
     InitialB_Magnitude = integer_pow(Radix, L),
@@ -59,8 +60,12 @@ encrypt(Config, Value) when is_integer(Value) ->
     InitialB_Value = Value rem InitialB_Magnitude,
     InitialA = maginteger(InitialA_Value, InitialA_Magnitude),
     InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
-    encrypt_loop(Config, P, 0, NumberOfRounds, InitialA, InitialB).
+    encrypt_loop(Config, P, 0, InitialA, InitialB).
 
+-spec decrypt(Config, EncryptedValue) -> Value
+        when Config :: config(),
+             EncryptedValue :: non_neg_integer(),
+             Value :: non_neg_integer().
 decrypt(Config, EncryptedValue) ->
     P = generate_p(Config),
     ?LOG("P value: ~p", [P]),
@@ -81,16 +86,20 @@ decrypt(Config, EncryptedValue) ->
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
 
-encrypt_loop(#{ number_of_rounds := NumberOfRounds }, _P, RoundIndex, NumberOfRounds, A, B)
+-spec encrypt_loop(config(), p_value(), non_neg_integer(), maginteger(), maginteger())
+        -> non_neg_integer().
+encrypt_loop(#{ number_of_rounds := NumberOfRounds }, _P, RoundIndex, A, B)
   when RoundIndex >= NumberOfRounds ->
     (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
-encrypt_loop(Config, P, RoundIndex, NumberOfRounds, A, B) ->
+encrypt_loop(Config, P, RoundIndex, A, B) ->
     FkValue = fk(Config, P, RoundIndex, maginteger_value(B)),
     C = maginteger_add(A, FkValue),
     NewA = B,
     NewB = C,
-    encrypt_loop(Config, P, RoundIndex + 1, NumberOfRounds, NewA, NewB).
+    encrypt_loop(Config, P, RoundIndex + 1, NewA, NewB).
 
+-spec decrypt_loop(config(), p_value(), non_neg_integer() | -1, maginteger(), maginteger())
+        -> non_neg_integer().
 decrypt_loop(_Config, _P, RoundIndex, A, B)
   when RoundIndex < 0 ->
     (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
@@ -101,9 +110,9 @@ decrypt_loop(Config, P, RoundIndex, A, B) ->
     NewA = maginteger_sub(C, FkValue),
     decrypt_loop(Config, P, RoundIndex - 1, NewA, NewB).
 
+-spec fk(config(), p_value(), non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 fk(Config, P, RoundIndex, B_Value) ->
-    #{ aes_key := AesKey,
-       tweak := Tweak,
+    #{ tweak := Tweak,
        radix := Radix,
        value_length := ValueLength } = Config,
     ParamT = iolist_size(Tweak),
@@ -124,7 +133,7 @@ fk(Config, P, RoundIndex, B_Value) ->
          B_Bytes],
 
     ToEncrypt = [P, Q],
-    Y = aes_cbc_mac(AesKey, ToEncrypt),
+    Y = aes_cbc_mac(Config, ToEncrypt),
     assert(byte_size(Y) >= (ParamD + 4)),
 
     ParamY_Bytes = binary:part(Y, {0, ParamD + 4}),
@@ -156,6 +165,7 @@ ceil(V) ->
         false -> trunc(V)
     end.
 
+-spec generate_p(config()) -> p_value().
 generate_p(#{ tweak := Tweak,
               radix := Radix,
               value_length := ValueLength,
@@ -172,11 +182,11 @@ generate_p(#{ tweak := Tweak,
       ValueLength:4/big-unsigned-integer-unit:8,
       TweakSize:4/big-unsigned-integer-unit:8>>.
 
--spec aes_cbc_mac(AesKey, ToEncrypt) -> Encrypted
-        when AesKey :: aes_key(),
+-spec aes_cbc_mac(Config, ToEncrypt) -> Encrypted
+        when Config :: config(),
              ToEncrypt :: iodata(),
              Encrypted :: binary().
-aes_cbc_mac(AesKey, ToEncrypt) ->
+aes_cbc_mac(#{ aes_key := AesKey }, ToEncrypt) ->
     IVec = zeroed_binary(16),
     Encrypted = crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt),
     binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
