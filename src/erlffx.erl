@@ -49,11 +49,11 @@
 -export_type([optional_config_params/0]).
 
 
--type config() :: #{ aes_key => iodata(),
-                     value_length => pos_integer(),
-                     tweak => iodata(),
-                     radix => radix(),
-                     number_of_rounds => non_neg_integer() }.
+-opaque config() :: #{ aes_key => iodata(),
+                       value_length => pos_integer(),
+                       tweak => iodata(),
+                       radix => radix(),
+                       number_of_rounds => non_neg_integer() }.
 -export_type([config/0]).
 
 -type p_value() :: binary().
