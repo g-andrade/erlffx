@@ -1,0 +1,297 @@
+-module(erlffx).
+
+%% ------------------------------------------------------------------
+%% API Function Exports
+%% ------------------------------------------------------------------
+
+-export([encrypt/2]).
+-export([decrypt/2]).
+
+%% ------------------------------------------------------------------
+%% Macro Definitions
+%% ------------------------------------------------------------------
+
+-define(VERSION, 1).
+-define(ADDITION_BLOCKWISE, 1).
+-define(METHOD_ALTERNATING_FEISTEL, 2).
+
+-define(DIV_BY_2(V), ((V) bsr 1)).
+-define(DIV_BY_4(V), ((V) bsr 2)).
+-define(DIV_BY_8(V), ((V) bsr 3)).
+
+-ifdef(TEST).
+-define(LOG(Fmt, Params), io:format(Fmt ++ "~n", Params)).
+-else.
+-define(LOG(Fmt, Params), ok).
+-endif.
+
+%% ------------------------------------------------------------------
+%% Type Definitions
+%% ------------------------------------------------------------------
+
+-type aes_key() :: iodata().
+-type tweak() :: iodata().
+-type p_value() :: binary().
+-type radix() :: 2..255.
+-type maginteger() :: {Value :: non_neg_integer(), Magnitude :: non_neg_integer()}.
+
+-type config() :: #{ aes_key => aes_key(),
+                     tweak => tweak(),
+                     radix => radix(),
+                     value_length => non_neg_integer(),
+                     number_of_rounds => non_neg_integer() }.
+
+%% ------------------------------------------------------------------
+%% API Function Definitions
+%% ------------------------------------------------------------------
+
+encrypt(Config, Value) when is_integer(Value) ->
+    P = generate_p(Config),
+    ?LOG("P value: ~p", [P]),
+    #{ radix := Radix,
+       value_length := ValueLength,
+       number_of_rounds := NumberOfRounds } = Config,
+    L = ?DIV_BY_2(ValueLength + 1),
+    InitialA_Magnitude = integer_pow(Radix, ValueLength - L),
+    InitialB_Magnitude = integer_pow(Radix, L),
+    InitialA_Value = Value div InitialB_Magnitude,
+    InitialB_Value = Value rem InitialB_Magnitude,
+    InitialA = maginteger(InitialA_Value, InitialA_Magnitude),
+    InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
+    encrypt_loop(Config, P, 0, NumberOfRounds, InitialA, InitialB).
+
+decrypt(Config, EncryptedValue) ->
+    P = generate_p(Config),
+    ?LOG("P value: ~p", [P]),
+    #{ radix := Radix,
+       value_length := ValueLength,
+       number_of_rounds := NumberOfRounds } = Config,
+    L = ?DIV_BY_2(ValueLength + 1),
+    InitialA_Magnitude = integer_pow(Radix, ValueLength - L),
+    InitialB_Magnitude = integer_pow(Radix, L),
+    InitialA_Value = EncryptedValue div InitialB_Magnitude,
+    InitialB_Value = EncryptedValue rem InitialB_Magnitude,
+    InitialA = maginteger(InitialA_Value, InitialA_Magnitude),
+    InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
+    decrypt_loop(Config, P, NumberOfRounds - 1, InitialA, InitialB).
+
+
+%% ------------------------------------------------------------------
+%% Internal Function Definitions
+%% ------------------------------------------------------------------
+
+encrypt_loop(#{ number_of_rounds := NumberOfRounds }, _P, RoundIndex, NumberOfRounds, A, B)
+  when RoundIndex >= NumberOfRounds ->
+    (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
+encrypt_loop(Config, P, RoundIndex, NumberOfRounds, A, B) ->
+    FkValue = fk(Config, P, RoundIndex, maginteger_value(B)),
+    C = maginteger_add(A, FkValue),
+    NewA = B,
+    NewB = C,
+    encrypt_loop(Config, P, RoundIndex + 1, NumberOfRounds, NewA, NewB).
+
+decrypt_loop(_Config, _P, RoundIndex, A, B)
+  when RoundIndex < 0 ->
+    (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
+decrypt_loop(Config, P, RoundIndex, A, B) ->
+    C = B,
+    NewB = A,
+    FkValue = fk(Config, P, RoundIndex, maginteger_value(NewB)),
+    NewA = maginteger_sub(C, FkValue),
+    decrypt_loop(Config, P, RoundIndex - 1, NewA, NewB).
+
+fk(Config, P, RoundIndex, B_Value) ->
+    #{ aes_key := AesKey,
+       tweak := Tweak,
+       radix := Radix,
+       value_length := ValueLength } = Config,
+    ParamT = iolist_size(Tweak),
+    ParamBeta = ?DIV_BY_2(ValueLength + 1),
+    ParamB = ?DIV_BY_8(ceil(ParamBeta * math:log2(Radix)) + 7),
+    ParamD = 4 * ?DIV_BY_4(ParamB + 3),
+    ParamM = ?DIV_BY_2(ValueLength + (RoundIndex band 1)),
+
+    Tweak_PaddingLength = (-ParamT - ParamB - 1) band 16#0F,
+    B_Bytes = binary:encode_unsigned(B_Value, big),
+    assert(byte_size(B_Bytes) =< ParamB),
+    B_Bytes_PaddingLength = ParamB - byte_size(B_Bytes),
+
+    Q = [Tweak,
+         zeroed_binary(Tweak_PaddingLength),
+         RoundIndex,
+         zeroed_binary(B_Bytes_PaddingLength),
+         B_Bytes],
+
+    ToEncrypt = [P, Q],
+    Y = aes_cbc_mac(AesKey, ToEncrypt),
+    assert(byte_size(Y) >= (ParamD + 4)),
+
+    ParamY_Bytes = binary:part(Y, {0, ParamD + 4}),
+    ParamY = binary:decode_unsigned(ParamY_Bytes, big),
+    Divisor = integer_pow(Radix, ParamM),
+    ParamZ = non_negative_rem(ParamY, Divisor),
+
+    ?LOG("-----------------------~n"
+         "RoundIndex: ~p~n"
+         "B value: ~p~n"
+         "Q value: ~p~n"
+         "CBC-MAC value: ~p~n"
+         "Output: ~p",
+         [RoundIndex,
+          integer_to_list(B_Value, Radix),
+          iolist_to_binary(Q), Y,
+          integer_to_list(ParamZ, Radix)]),
+    ParamZ.
+
+-spec ceil(float()) -> integer().
+ceil(V) when V < 0.0 ->
+    case (V - trunc(V)) >= -0.5 of
+        true -> trunc(V);
+        false -> trunc(V - 1)
+    end;
+ceil(V) ->
+    case (V - trunc(V)) >= 0.5 of
+        true -> trunc(V + 1);
+        false -> trunc(V)
+    end.
+
+generate_p(#{ tweak := Tweak,
+              radix := Radix,
+              value_length := ValueLength,
+              number_of_rounds := NumberOfRounds }) ->
+    TweakSize = iolist_size(Tweak),
+    SplitN = (?DIV_BY_2(ValueLength) band 16#FF),
+    <<?VERSION:8,
+      ?METHOD_ALTERNATING_FEISTEL:8,
+      ?ADDITION_BLOCKWISE:8,
+      0:16,
+      Radix:8,
+      NumberOfRounds:8,
+      SplitN:8,
+      ValueLength:4/big-unsigned-integer-unit:8,
+      TweakSize:4/big-unsigned-integer-unit:8>>.
+
+-spec aes_cbc_mac(AesKey, ToEncrypt) -> Encrypted
+        when AesKey :: aes_key(),
+             ToEncrypt :: iodata(),
+             Encrypted :: binary().
+aes_cbc_mac(AesKey, ToEncrypt) ->
+    IVec = zeroed_binary(16),
+    Encrypted = crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt),
+    binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
+
+-spec zeroed_binary(N :: non_neg_integer()) -> binary().
+zeroed_binary(N) ->
+    <<<<0:8>> || _ <- lists:seq(1, N)>>.
+
+-spec integer_pow(Value, Power) -> Result
+        when Value :: integer(),
+             Power :: non_neg_integer(),
+             Result :: integer().
+integer_pow(_Value, 0) ->
+    1;
+integer_pow(Value, Power) when Power > 0 ->
+    Value * integer_pow(Value, Power - 1).
+
+-spec assert(true) -> ok.
+assert(true) -> ok.
+
+-spec non_negative_rem(A, B) -> Rem
+        when A :: integer(),
+             B :: pos_integer(),
+             Rem :: non_neg_integer().
+non_negative_rem(A, B) when A < 0, B > 0 ->
+    (A rem B) + B;
+non_negative_rem(A, B) when A >= 0, B > 0 ->
+    A rem B.
+
+-spec maginteger(Value, Magnitude) -> MagInteger
+        when Value :: non_neg_integer(),
+             Magnitude :: non_neg_integer(),
+             MagInteger :: maginteger().
+maginteger(Value, Magnitude) ->
+    {Value, Magnitude}.
+
+-spec maginteger_add(MagInteger1, Integer) -> MagInteger2
+        when MagInteger1 :: maginteger(),
+             Integer :: integer(),
+             MagInteger2 :: maginteger().
+maginteger_add({Value, Magnitude}, Integer) when is_integer(Integer) ->
+    {non_negative_rem(Value + Integer, Magnitude), Magnitude}.
+
+-spec maginteger_sub(MagInteger1, Integer) -> MagInteger2
+        when MagInteger1 :: maginteger(),
+             Integer :: integer(),
+             MagInteger2 :: maginteger().
+maginteger_sub({Value, Magnitude}, Integer) when is_integer(Integer) ->
+    {non_negative_rem(Value - Integer, Magnitude), Magnitude}.
+
+-spec maginteger_value(maginteger()) -> non_neg_integer().
+maginteger_value({Value, _Magnitude}) ->
+    Value.
+
+-spec maginteger_magnitude(maginteger()) -> non_neg_integer().
+maginteger_magnitude({_Value, Magnitude}) ->
+    Magnitude.
+
+%% ------------------------------------------------------------------
+%% Unit Testing Function definitions
+%% ------------------------------------------------------------------
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+run_test_(Config, Value, ExpectedEncryptedValue) ->
+    EncryptedValue = erlffx:encrypt(Config, Value),
+    ?assertEqual(EncryptedValue, ExpectedEncryptedValue),
+    DecryptedValue = erlffx:decrypt(Config, EncryptedValue),
+    ?assertEqual(DecryptedValue, Value).
+
+%
+% http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
+%
+
+aes_ffx_tests_key() ->
+    <<(16#2b7e151628aed2a6abf7158809cf4f3c):16/big-unsigned-integer-unit:8>>.
+
+aes_ffx_vector1_test() ->
+    Config = #{ aes_key => aes_ffx_tests_key(),
+                tweak => "9876543210",
+                radix => 10,
+                value_length => 10,
+                number_of_rounds => 10 },
+    run_test_(Config, 123456789, 6124200773).
+
+aes_ffx_vector2_test() ->
+    Config = #{ aes_key => aes_ffx_tests_key(),
+                tweak => "",
+                radix => 10,
+                value_length => 10,
+                number_of_rounds => 10 },
+    run_test_(Config, 123456789, 2433477484).
+
+aes_ffx_vector3_test() ->
+    Config = #{ aes_key => aes_ffx_tests_key(),
+                tweak => "2718281828",
+                radix => 10,
+                value_length => 6,
+                number_of_rounds => 10 },
+    run_test_(Config, 314159, 535005).
+
+aes_ffx_vector4_test() ->
+    Config = #{ aes_key => aes_ffx_tests_key(),
+                tweak => "7777777",
+                radix => 10,
+                value_length => 9,
+                number_of_rounds => 10 },
+    run_test_(Config, 999999999, 658229573).
+
+aes_ffx_vector5_test() ->
+    Config = #{ aes_key => aes_ffx_tests_key(),
+                tweak => "TQF9J5QDAGSCSPB1",
+                radix => 36,
+                value_length => 16,
+                number_of_rounds => 10 },
+    run_test_(Config, 36#C4XPWULBM3M863JH, 36#C8AQ3U846ZWH6QZP).
+
+-endif.

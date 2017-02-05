@@ -1,0 +1,16 @@
+{application, erlffx,
+ [{description, "The FFX Mode of Operation for Format-Preserving Encryption"},
+  {vsn, git},
+  {registered, [erlffx]},
+  {applications,
+   [kernel,
+    stdlib,
+    crypto
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, ["Guilherme Andrade"]},
+  {licenses, ["MIT"]},
+  {links, [{"Github", "https://github.com/g-andrade/erlffx"}]}
+ ]}.
