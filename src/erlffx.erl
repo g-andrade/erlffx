@@ -5,8 +5,8 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([encrypt/2]).
--export([decrypt/2]).
+-export([encrypt/2]). -ignore_xref({encrypt,2}).
+-export([decrypt/2]). -ignore_xref({decrypt,2}).
 
 %% ------------------------------------------------------------------
 %% Macro Definitions
