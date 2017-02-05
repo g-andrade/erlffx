@@ -5,6 +5,8 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
+-export([config/2]).  -ignore_xref({config,2}).
+-export([config/3]).  -ignore_xref({config,3}).
 -export([encrypt/2]). -ignore_xref({encrypt,2}).
 -export([decrypt/2]). -ignore_xref({decrypt,2}).
 
@@ -15,6 +17,12 @@
 -define(VERSION, 1).
 -define(ADDITION_BLOCKWISE, 1).
 -define(METHOD_ALTERNATING_FEISTEL, 2).
+
+-define(MIN_RADIX, 2).
+-define(MAX_RADIX, 255).
+
+-define(DEFAULT_RADIX, 10).
+-define(DEFAULT_NUMBER_OF_ROUNDS, 10).
 
 -define(DIV_BY_2(V), ((V) bsr 1)).
 -define(DIV_BY_4(V), ((V) bsr 2)).
@@ -30,10 +38,18 @@
 %% Type Definitions
 %% ------------------------------------------------------------------
 
--type config() :: #{ aes_key => iodata(),
+-type radix() :: ?MIN_RADIX..?MAX_RADIX.
+-export_type([radix/0]).
+
+-type optional_config_params() :: #{ tweak => iodata(),
+                                     radix => radix(),
+                                     number_of_rounds => non_neg_integer() }.
+-export_type([optional_config_params/0]).
+
+-type config() :: #{ aes_key := iodata(),
+                     value_length := pos_integer(),
                      tweak => iodata(),
-                     radix => 2..255,
-                     value_length => non_neg_integer(),
+                     radix => radix(),
                      number_of_rounds => non_neg_integer() }.
 -export_type([config/0]).
 
@@ -43,6 +59,25 @@
 %% ------------------------------------------------------------------
 %% API Function Definitions
 %% ------------------------------------------------------------------
+
+-spec config(AesKey, ValueLength) -> Config
+        when AesKey :: iodata(),
+             ValueLength :: pos_integer(),
+             Config :: config().
+config(AesKey, ValueLength) ->
+    config(AesKey, ValueLength, #{}).
+
+-spec config(AesKey, ValueLength, OptionalParams) -> Config
+        when AesKey :: iodata(),
+             ValueLength :: pos_integer(),
+             OptionalParams :: optional_config_params(),
+             Config :: config().
+config(AesKey, ValueLength, OptionalParams) ->
+    MandatoryParams =
+        #{ aes_key => AesKey,
+           value_length => ValueLength },
+    Config = maps:merge(OptionalParams, MandatoryParams),
+    validate_config(Config).
 
 -spec encrypt(Config, Value) -> EncryptedValue
         when Config :: config(),
@@ -85,6 +120,41 @@ decrypt(Config, EncryptedValue) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
+
+-spec validate_config(config()) -> config().
+validate_config(Config) ->
+    #{ aes_key => validate_aes_key(maps:get(aes_key, Config)),
+       value_length => validate_value_length(maps:get(value_length, Config)),
+       tweak => validate_tweak(maps:get(tweak, Config, undefined)),
+       radix => validate_radix(maps:get(radix, Config, undefined)),
+       number_of_rounds => validate_number_of_rounds(maps:get(number_of_rounds, Config, undefined)) }.
+
+-spec validate_aes_key(iodata()) -> iodata().
+validate_aes_key(AesKey) ->
+    assert(lists:member(iolist_size(AesKey), [16, 24, 32])),
+    AesKey.
+
+-spec validate_value_length(pos_integer()) -> pos_integer().
+validate_value_length(ValueLength) when is_integer(ValueLength), ValueLength > 0 ->
+    ValueLength.
+
+-spec validate_tweak(iodata() | undefined) -> iodata().
+validate_tweak(Tweak) when is_binary(Tweak); is_list(Tweak) ->
+    Tweak;
+validate_tweak(undefined) ->
+    "".
+
+-spec validate_radix(radix() | undefined) -> radix().
+validate_radix(Radix) when is_integer(Radix), Radix >= ?MIN_RADIX, Radix =< ?MAX_RADIX ->
+    Radix;
+validate_radix(undefined) ->
+    ?DEFAULT_RADIX.
+
+-spec validate_number_of_rounds(non_neg_integer() | undefined) -> non_neg_integer().
+validate_number_of_rounds(NumberOfRounds) when is_integer(NumberOfRounds), NumberOfRounds >= 0 ->
+    NumberOfRounds;
+validate_number_of_rounds(undefined) ->
+    ?DEFAULT_NUMBER_OF_ROUNDS.
 
 -spec encrypt_loop(config(), p_value(), non_neg_integer(), maginteger(), maginteger())
         -> non_neg_integer().
@@ -271,54 +341,43 @@ common_testing_aes128_key() ->
 
 -spec aes_ffx_vector1_test() -> ok.
 aes_ffx_vector1_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => "9876543210",
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config =
+        config(common_testing_aes128_key(), 10,
+               #{ tweak => "9876543210" }),
     run_encryptdecrypt_test_(Config, 123456789, 6124200773).
 
 -spec aes_ffx_vector2_test() -> ok.
 aes_ffx_vector2_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => "",
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config = config(common_testing_aes128_key(), 10),
     run_encryptdecrypt_test_(Config, 123456789, 2433477484).
 
 -spec aes_ffx_vector3_test() -> ok.
 aes_ffx_vector3_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => "2718281828",
-                radix => 10,
-                value_length => 6,
-                number_of_rounds => 10 },
+    Config =
+        config(common_testing_aes128_key(), 6,
+               #{ tweak => "2718281828" }),
     run_encryptdecrypt_test_(Config, 314159, 535005).
 
 -spec aes_ffx_vector4_test() -> ok.
 aes_ffx_vector4_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => "7777777",
-                radix => 10,
-                value_length => 9,
-                number_of_rounds => 10 },
+    Config =
+        config(common_testing_aes128_key(), 9,
+               #{ tweak => "7777777" }),
     run_encryptdecrypt_test_(Config, 999999999, 658229573).
 
 -spec aes_ffx_vector5_test() -> ok.
 aes_ffx_vector5_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => "TQF9J5QDAGSCSPB1",
-                radix => 36,
-                value_length => 16,
-                number_of_rounds => 10 },
+    Config =
+        config(common_testing_aes128_key(), 16,
+               #{ tweak => "TQF9J5QDAGSCSPB1",
+                  radix => 36 }),
     run_encryptdecrypt_test_(Config, 36#C4XPWULBM3M863JH, 36#C8AQ3U846ZWH6QZP).
 
 %
 % http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf
 %
 
--spec digit_list_in_radix(2..255, [0..254]) -> string().
+-spec digit_list_in_radix(radix(), [0..254]) -> string().
 digit_list_in_radix(Radix, Digits) ->
     lists:map(
       fun (Digit) when Digit < Radix ->
@@ -327,7 +386,7 @@ digit_list_in_radix(Radix, Digits) ->
       end,
       Digits).
 
--spec digit_list_to_number(2..255, [0..254]) -> non_neg_integer().
+-spec digit_list_to_number(radix(), [0..254]) -> non_neg_integer().
 digit_list_to_number(_Radix, []) -> 0;
 digit_list_to_number(Radix, Digits) ->
     EncodedDigits = digit_list_in_radix(Radix, Digits),
@@ -335,11 +394,10 @@ digit_list_to_number(Radix, Digits) ->
 
 -spec ff1_sample3_aes128_test() -> ok.
 ff1_sample3_aes128_test() ->
-    Config = #{ aes_key => common_testing_aes128_key(),
-                tweak => <<16#37,16#37,16#37,16#37,16#70,16#71,16#72,16#73,16#37,16#37,16#37>>,
-                radix => 36,
-                value_length => 19,
-                number_of_rounds => 10 },
+    Config =
+        config(common_testing_aes128_key(), 19,
+               #{ tweak => <<16#37,16#37,16#37,16#37,16#70,16#71,16#72,16#73,16#37,16#37,16#37>>,
+                  radix => 36 }),
     EncryptedValue =
         digit_list_to_number(36, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
                                   10, 11, 12, 13, 14, 15, 16, 17, 18]),
@@ -350,32 +408,29 @@ ff1_sample3_aes128_test() ->
 
 -spec ff1_sample4_aes192_test() -> ok.
 ff1_sample4_aes192_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
-                             :24/big-unsigned-integer-unit:8>>,
-                tweak => <<>>,
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
+                 :24/big-unsigned-integer-unit:8>>,
+               10),
     run_encryptdecrypt_test_(Config, 123456789, 2830668132).
 
 -spec ff1_sample5_aes192_test() -> ok.
 ff1_sample5_aes192_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
-                             :24/big-unsigned-integer-unit:8>>,
-                tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>>,
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
+                 :24/big-unsigned-integer-unit:8>>,
+               10,
+               #{ tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>> }),
     run_encryptdecrypt_test_(Config, 123456789, 2496655549).
 
 -spec ff1_sample6_aes192_test() -> ok.
 ff1_sample6_aes192_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
-                             :24/big-unsigned-integer-unit:8>>,
-                tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
-                radix => 36,
-                value_length => 19,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
+                 :24/big-unsigned-integer-unit:8>>,
+               19,
+               #{ tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
+                  radix => 36 }),
     EncryptedValue =
         digit_list_to_number(36, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
                                   10, 11, 12, 13, 14, 15, 16, 17, 18]),
@@ -386,32 +441,29 @@ ff1_sample6_aes192_test() ->
 
 -spec ff1_sample7_aes256_test() -> ok.
 ff1_sample7_aes256_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
-                             :32/big-unsigned-integer-unit:8>>,
-                tweak => "",
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
+                 :32/big-unsigned-integer-unit:8>>,
+               10),
     run_encryptdecrypt_test_(Config, 123456789, 6657667009).
 
 -spec ff1_sample8_aes256_test() -> ok.
 ff1_sample8_aes256_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
-                             :32/big-unsigned-integer-unit:8>>,
-                tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>>,
-                radix => 10,
-                value_length => 10,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
+                 :32/big-unsigned-integer-unit:8>>,
+               10,
+               #{ tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>> }),
     run_encryptdecrypt_test_(Config, 123456789, 1001623463).
 
 -spec ff1_sample9_aes256_test() -> ok.
 ff1_sample9_aes256_test() ->
-    Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
-                             :32/big-unsigned-integer-unit:8>>,
-                tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
-                radix => 36,
-                value_length => 19,
-                number_of_rounds => 10 },
+    Config =
+        config(<<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
+                 :32/big-unsigned-integer-unit:8>>,
+               19,
+               #{ tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
+                  radix => 36 }),
     EncryptedValue =
         digit_list_to_number(36, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
                                   10, 11, 12, 13, 14, 15, 16, 17, 18]),
