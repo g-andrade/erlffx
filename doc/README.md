@@ -20,9 +20,13 @@ __Authors:__ Guilherme Andrade ([`erlffx(at)gandrade(dot)net`](mailto:erlffx(at)
 * Optional 'tweak' values may be defined
 * Number of rounds is configurable (10 by default)
 
-The code was successfully tested on generations 17, 18 and 19 of Erlang/OTP; the unit tests themselves were written using on the following lists of test vectors:
+The code was successfully tested on generations 17, 18 and 19 of Erlang/OTP; the unit tests themselves were written using the following lists of test vectors:
 * [AES FFX Test Vector Data](http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt)
 * [FF1 samples](http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf)
+
+
+### <a name="Examples">Examples</a> ###
+
 
 ```erlang
 
@@ -32,7 +36,7 @@ ValueLength = 10,
 Config = erlffx:config(AesKey, ValueLength).
 
 Encrypted = erlffx:encrypt(Config, 123456789). % 2433477484
-Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
+Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 ```
 ---------
@@ -45,7 +49,7 @@ ValueLength = 10,
 Config = erlffx:config(AesKey, ValueLength, #{ tweak => "9876543210" }).
 
 Encrypted = erlffx:encrypt(Config, 123456789). % 6124200773
-Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
+Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 ```
 ---------
@@ -58,7 +62,7 @@ ValueLength = 16,
 Config = erlffx:config(AesKey, ValueLength, #{ tweak => "TQF9J5QDAGSCSPB1", radix => 36 }).
 
 Encrypted = erlffx:encrypt(Config, 36#C4XPWULBM3M863JH). % 36#C8AQ3U846ZWH6QZP
-Decrypted = erlffx:encrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
+Decrypted = erlffx:decrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
 
 ```
 ---------
@@ -72,7 +76,7 @@ ValueLength = 6,
 Config = erlffx:config(AesKey, ValueLength, #{ radix => 2 }).
 
 Encrypted = erlffx:encrypt(Config, 2#000001).  % 2#100100
-Decrypted = erlffx:encrypt(Config, Encrypted). % 2#000001
+Decrypted = erlffx:decrypt(Config, Encrypted). % 2#000001
 
 ```
 
