@@ -17,7 +17,7 @@ __Authors:__ Guilherme Andrade ([`erlffx(at)gandrade(dot)net`](mailto:erlffx(at)
 
 * AES-128 / AES-192 (only Erlang 19 and up) / AES-256 keys are supported (CBC mode)
 * Any positive word length is supported
-* Any radix (i.e. alphabet size) between 2 and 255 is acceptable
+* Any radix / alphabet size between 2 and 255 is acceptable (10 by default)
 * Optional 'tweak' values may be defined
 * Number of rounds is configurable (10 by default)
 
