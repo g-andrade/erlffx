@@ -1,4 +1,5 @@
 -module(erlffx).
+-compile([inline, inline_list_funcs]).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
