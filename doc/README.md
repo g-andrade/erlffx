@@ -27,7 +27,7 @@ The code was successfully tested on generations 17, 18 and 19 of Erlang/OTP; the
 ```erlang
 
 % AES-128 CBC / 10-digit decimal words
-AesKey = <<16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8>>,
+AesKey = <<43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60>>,
 ValueLength = 10,
 Config = erlffx:config(AesKey, ValueLength).
 
@@ -40,7 +40,7 @@ Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
 ```erlang
 
 % AES-128 CBC / 10-digit decimal words / custom tweak
-AesKey = <<16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8>>,
+AesKey = <<43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60>>,
 ValueLength = 10,
 Config = erlffx:config(AesKey, ValueLength, #{ tweak => "9876543210" }).
 
@@ -53,7 +53,7 @@ Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
 ```erlang
 
 % AES-128 CBC / 16-digit base-36 words / custom tweak
-AesKey = <<16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8>>,
+AesKey = <<43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60>>,
 ValueLength = 16,
 Config = erlffx:config(AesKey, ValueLength, #{ tweak => "TQF9J5QDAGSCSPB1", radix => 36 }).
 
@@ -66,8 +66,8 @@ Decrypted = erlffx:encrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
 ```erlang
 
 % AES-256 CBC / 6-digit binary words
-AesKey = <<16#2b7e151628aed2a6abf7158809cf4f3cef4359d8d580aa4f7f036d6f04fc6a94
-           :32/big-unsigned-integer-unit:8>>,
+AesKey = <<43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60,
+           239,67,89,216,213,128,170,79,127,3,109,111,4,252,106,148>>,
 ValueLength = 6,
 Config = erlffx:config(AesKey, ValueLength, #{ radix => 2 }).
 

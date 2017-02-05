@@ -15,9 +15,7 @@
 ### <a name="type-config">config()</a> ###
 
 
-<pre><code>
-config() = #{aes_key =&gt; iodata(), value_length =&gt; pos_integer(), tweak =&gt; iodata(), radix =&gt; <a href="#type-radix">radix()</a>, number_of_rounds =&gt; non_neg_integer()}
-</code></pre>
+__abstract datatype__: `config()`
 
 
 
