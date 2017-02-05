@@ -1,4 +1,5 @@
 -module(erlffx).
+-author('Guilherme Andrade <erlffx(at)gandrade(dot)net>').
 -compile([inline, inline_list_funcs]).
 
 %% ------------------------------------------------------------------
@@ -38,7 +39,8 @@
 %% Type Definitions
 %% ------------------------------------------------------------------
 
--type radix() :: ?MIN_RADIX..?MAX_RADIX.
+%-type radix() :: ?MIN_RADIX..?MAX_RADIX. % otherwise edoc blows up
+-type radix() :: 2..255.
 -export_type([radix/0]).
 
 -type optional_config_params() :: #{ tweak => iodata(),
@@ -47,19 +49,11 @@
 -export_type([optional_config_params/0]).
 
 
--ifdef(pre19).
 -type config() :: #{ aes_key => iodata(),
                      value_length => pos_integer(),
                      tweak => iodata(),
                      radix => radix(),
                      number_of_rounds => non_neg_integer() }.
--else.
--type config() :: #{ aes_key := iodata(),
-                     value_length := pos_integer(),
-                     tweak => iodata(),
-                     radix => radix(),
-                     number_of_rounds => non_neg_integer() }.
--endif.
 -export_type([config/0]).
 
 -type p_value() :: binary().
@@ -355,7 +349,7 @@ maginteger_magnitude({_Value, Magnitude}) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
--spec test() -> ok.
+%-spec test() -> ok.
 
 -spec run_encryptdecrypt_test_(erlffx:config(), non_neg_integer(), non_neg_integer()) -> ok.
 run_encryptdecrypt_test_(Config, Value, ExpectedEncryptedValue) ->

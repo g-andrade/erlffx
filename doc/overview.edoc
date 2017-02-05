@@ -1,0 +1,67 @@
+@author Guilherme Andrade <erlffx(at)gandrade(dot)net>
+@copyright 2017 Guilherme Andrade
+@version 1.0.0
+@title erlffx
+@doc `erlffx': Format Preserving Encryption - FFX for Erlang
+
+<hr/>
+
+`erlffx' is an Erlang implementation of the mechanism described in the 2010 paper <a href="http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.304.1736&amp;rep=rep1&amp;type=pdf">The FFX Mode of Operation for Format-Preserving Encryption</a> by Bellare, Rogaway and Spies. It is based on an existing <a href="https://github.com/michaeltandy/java-ffx-format-preserving-encryption">Java implementation</a> by Michael Tandy.
+
+* AES-128 / AES-192 (only Erlang 19 and up) / AES-256 keys are supported (CBC mode)
+* Any positive word length is supported
+* Any radix (i.e. alphabet size) between 2 and 255 is acceptable
+* Optional 'tweak' values may be defined
+* Number of rounds is configurable (10 by default)
+
+The code was successfully tested on generations 17, 18 and 19 of Erlang/OTP; the unit tests themselves were written using on the following lists of test vectors:
+* <a href="http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt">AES FFX Test Vector Data</a>
+* <a href="http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf">FF1 samples</a>
+
+<pre lang="erlang">
+% AES-128 CBC / 10-digit decimal words
+AesKey = &lt;&lt;16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8&gt;&gt;,
+ValueLength = 10,
+Config = erlffx:config(AesKey, ValueLength).
+
+Encrypted = erlffx:encrypt(Config, 123456789). % 2433477484
+Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
+</pre>
+
+<hr/>
+
+<pre lang="erlang">
+% AES-128 CBC / 10-digit decimal words / custom tweak
+AesKey = &lt;&lt;16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8&gt;&gt;,
+ValueLength = 10,
+Config = erlffx:config(AesKey, ValueLength, #{ tweak => "9876543210" }).
+
+Encrypted = erlffx:encrypt(Config, 123456789). % 6124200773
+Decrypted = erlffx:encrypt(Config, Encrypted). % 123456789
+</pre>
+
+<hr/>
+
+<pre lang="erlang">
+% AES-128 CBC / 16-digit base-36 words / custom tweak
+AesKey = &lt;&lt;16#2b7e151628aed2a6abf7158809cf4f3c:16/big-unsigned-integer-unit:8&gt;&gt;,
+ValueLength = 16,
+Config = erlffx:config(AesKey, ValueLength, #{ tweak => "TQF9J5QDAGSCSPB1", radix => 36 }).
+
+Encrypted = erlffx:encrypt(Config, 36#C4XPWULBM3M863JH). % 36#C8AQ3U846ZWH6QZP
+Decrypted = erlffx:encrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
+</pre>
+
+<hr/>
+
+<pre lang="erlang">
+% AES-256 CBC / 6-digit binary words
+AesKey = &lt;&lt;16#2b7e151628aed2a6abf7158809cf4f3cef4359d8d580aa4f7f036d6f04fc6a94
+           :32/big-unsigned-integer-unit:8&gt;&gt;,
+ValueLength = 6,
+Config = erlffx:config(AesKey, ValueLength, #{ radix => 2 }).
+
+Encrypted = erlffx:encrypt(Config, 2#000001).  % 2#100100
+Decrypted = erlffx:encrypt(Config, Encrypted). % 2#000001
+</pre>
+
