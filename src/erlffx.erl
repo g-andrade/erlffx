@@ -252,12 +252,16 @@ maginteger_magnitude({_Value, Magnitude}) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+-spec test() -> ok.
+
+-spec run_encryptdecrypt_test_(erlffx:config(), non_neg_integer(), non_neg_integer()) -> ok.
 run_encryptdecrypt_test_(Config, Value, ExpectedEncryptedValue) ->
     EncryptedValue = erlffx:encrypt(Config, Value),
     ?assertEqual(EncryptedValue, ExpectedEncryptedValue),
     DecryptedValue = erlffx:decrypt(Config, EncryptedValue),
     ?assertEqual(DecryptedValue, Value).
 
+-spec common_testing_aes128_key() -> binary().
 common_testing_aes128_key() ->
     <<(16#2b7e151628aed2a6abf7158809cf4f3c):16/big-unsigned-integer-unit:8>>.
 
@@ -265,6 +269,7 @@ common_testing_aes128_key() ->
 % http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
 %
 
+-spec aes_ffx_vector1_test() -> ok.
 aes_ffx_vector1_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => "9876543210",
@@ -273,6 +278,7 @@ aes_ffx_vector1_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 6124200773).
 
+-spec aes_ffx_vector2_test() -> ok.
 aes_ffx_vector2_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => "",
@@ -281,6 +287,7 @@ aes_ffx_vector2_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 2433477484).
 
+-spec aes_ffx_vector3_test() -> ok.
 aes_ffx_vector3_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => "2718281828",
@@ -289,6 +296,7 @@ aes_ffx_vector3_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 314159, 535005).
 
+-spec aes_ffx_vector4_test() -> ok.
 aes_ffx_vector4_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => "7777777",
@@ -297,6 +305,7 @@ aes_ffx_vector4_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 999999999, 658229573).
 
+-spec aes_ffx_vector5_test() -> ok.
 aes_ffx_vector5_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => "TQF9J5QDAGSCSPB1",
@@ -309,6 +318,7 @@ aes_ffx_vector5_test() ->
 % http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf
 %
 
+-spec digit_list_in_radix(2..255, [0..254]) -> string().
 digit_list_in_radix(Radix, Digits) ->
     lists:map(
       fun (Digit) when Digit < Radix ->
@@ -317,12 +327,13 @@ digit_list_in_radix(Radix, Digits) ->
       end,
       Digits).
 
+-spec digit_list_to_number(2..255, [0..254]) -> non_neg_integer().
 digit_list_to_number(_Radix, []) -> 0;
 digit_list_to_number(Radix, Digits) ->
     EncodedDigits = digit_list_in_radix(Radix, Digits),
     list_to_integer(EncodedDigits, Radix).
 
-
+-spec ff1_sample3_aes128_test() -> ok.
 ff1_sample3_aes128_test() ->
     Config = #{ aes_key => common_testing_aes128_key(),
                 tweak => <<16#37,16#37,16#37,16#37,16#70,16#71,16#72,16#73,16#37,16#37,16#37>>,
@@ -337,6 +348,7 @@ ff1_sample3_aes128_test() ->
                                   30, 5, 0, 9, 14, 30, 22]),
     run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
 
+-spec ff1_sample4_aes192_test() -> ok.
 ff1_sample4_aes192_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
                              :24/big-unsigned-integer-unit:8>>,
@@ -346,6 +358,7 @@ ff1_sample4_aes192_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 2830668132).
 
+-spec ff1_sample5_aes192_test() -> ok.
 ff1_sample5_aes192_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
                              :24/big-unsigned-integer-unit:8>>,
@@ -355,6 +368,7 @@ ff1_sample5_aes192_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 2496655549).
 
+-spec ff1_sample6_aes192_test() -> ok.
 ff1_sample6_aes192_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F
                              :24/big-unsigned-integer-unit:8>>,
@@ -370,6 +384,7 @@ ff1_sample6_aes192_test() ->
                                   33, 31, 3, 2, 34, 28, 27]),
     run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
 
+-spec ff1_sample7_aes256_test() -> ok.
 ff1_sample7_aes256_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
                              :32/big-unsigned-integer-unit:8>>,
@@ -379,6 +394,7 @@ ff1_sample7_aes256_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 6657667009).
 
+-spec ff1_sample8_aes256_test() -> ok.
 ff1_sample8_aes256_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
                              :32/big-unsigned-integer-unit:8>>,
@@ -388,6 +404,7 @@ ff1_sample8_aes256_test() ->
                 number_of_rounds => 10 },
     run_encryptdecrypt_test_(Config, 123456789, 1001623463).
 
+-spec ff1_sample9_aes256_test() -> ok.
 ff1_sample9_aes256_test() ->
     Config = #{ aes_key => <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94
                              :32/big-unsigned-integer-unit:8>>,
