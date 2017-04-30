@@ -10,7 +10,7 @@ ifeq ($(REBAR3),)
 	REBAR3 = $(CURDIR)/rebar3
 endif
 
-.PHONY: deps build test dialyzer xref doc test
+.PHONY: deps build test dialyzer xref doc test publish
 
 all: build
 
