@@ -1,5 +1,5 @@
 {application, erlffx,
- [{description, "The FFX Mode of Operation for Format-Preserving Encryption"},
+ [{description, "Format-Preserving Encryption - FFX"},
   {vsn, git},
   {registered, [erlffx]},
   {applications,
