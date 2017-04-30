@@ -1,6 +1,5 @@
 @author Guilherme Andrade <erlffx(at)gandrade(dot)net>
 @copyright 2017 Guilherme Andrade
-@version 1.0.0
 @title erlffx
 @doc `erlffx': Format Preserving Encryption - FFX for Erlang
 
