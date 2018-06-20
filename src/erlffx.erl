@@ -232,6 +232,7 @@ fk(Config, P, RoundIndex, B_Value) ->
           integer_to_list(ParamZ, Radix)]),
     ParamZ.
 
+-ifndef(POST_OTP_19).
 -spec ceil(float()) -> integer().
 ceil(V) when V < 0.0 ->
     case (V - trunc(V)) >= -0.5 of
@@ -243,6 +244,7 @@ ceil(V) ->
         true -> trunc(V + 1);
         false -> trunc(V)
     end.
+-endif.
 
 -spec log2(radix()) -> float().
 -ifdef(pre18).
