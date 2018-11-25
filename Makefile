@@ -12,6 +12,8 @@ endif
 
 .PHONY: deps build clean dialyzer xref doc test publish
 
+.NOTPARALLEL: check
+
 all: build
 
 build: $(REBAR3)
@@ -23,6 +25,8 @@ $(REBAR3):
 
 clean: $(REBAR3)
 	@$(REBAR3) clean
+
+check: dialyzer xref
 
 dialyzer: $(REBAR3)
 	@$(REBAR3) dialyzer
