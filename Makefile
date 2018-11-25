@@ -21,21 +21,21 @@ $(REBAR3):
 	wget $(REBAR3_URL) || curl -Lo rebar3 $(REBAR3_URL)
 	@chmod a+x rebar3
 
-clean:
+clean: $(REBAR3)
 	@$(REBAR3) clean
 
-dialyzer:
+dialyzer: $(REBAR3)
 	@$(REBAR3) dialyzer
 
-xref:
+xref: $(REBAR3)
 	@$(REBAR3) xref
 
 doc: build
 	./scripts/hackish_inject_version_in_docs.sh
 	./scripts/hackish_make_docs.sh
 
-test:
+test: $(REBAR3)
 	@$(REBAR3) eunit
 
-publish:
+publish: $(REBAR3)
 	@$(REBAR3) as publish hex publish
