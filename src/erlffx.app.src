@@ -11,5 +11,7 @@
   {modules, []},
 
   {licenses, ["MIT"]},
-  {links, [{"Github", "https://github.com/g-andrade/erlffx"}]}
+  {links, [{"GitHub", "https://github.com/g-andrade/erlffx"},
+           {"GitLab", "https://gitlab.com/g-andrade/erlffx"}
+          ]}
  ]}.
