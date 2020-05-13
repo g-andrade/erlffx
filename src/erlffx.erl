@@ -133,15 +133,9 @@ validate_config(Config) ->
        number_of_rounds => validate_number_of_rounds(maps:get(number_of_rounds, Config, undefined)) }.
 
 -spec validate_aes_key(iodata()) -> iodata().
--ifdef(pre19).
-validate_aes_key(AesKey) ->
-    assert(lists:member(iolist_size(AesKey), [16, 32])),
-    AesKey.
--else.
 validate_aes_key(AesKey) ->
     assert(lists:member(iolist_size(AesKey), [16, 24, 32])),
     AesKey.
--endif.
 
 -spec validate_value_length(pos_integer()) -> pos_integer().
 validate_value_length(ValueLength) when is_integer(ValueLength), ValueLength > 0 ->
@@ -267,21 +261,10 @@ generate_p(#{ tweak := Tweak,
         when Config :: config(),
              ToEncrypt :: iodata(),
              Encrypted :: binary().
--ifdef(pre19).
-aes_cbc_mac(#{ aes_key := AesKey }, ToEncrypt) ->
-    Cipher = case iolist_size(AesKey) of
-                 16 -> aes_cbc128;
-                 32 -> aes_cbc256
-             end,
-    IVec = zeroed_binary(16),
-    Encrypted = crypto:block_encrypt(Cipher, AesKey, IVec, ToEncrypt),
-    binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
--else.
 aes_cbc_mac(#{ aes_key := AesKey }, ToEncrypt) ->
     IVec = zeroed_binary(16),
     Encrypted = crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt),
     binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
--endif.
 
 -spec zeroed_binary(N :: non_neg_integer()) -> binary().
 zeroed_binary(N) ->
@@ -428,7 +411,6 @@ ff1_sample3_aes128_test() ->
                                   30, 5, 0, 9, 14, 30, 22]),
     run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
 
--ifndef(pre19).
 -spec ff1_sample4_aes192_test() -> ok.
 ff1_sample4_aes192_test() ->
     Config =
@@ -461,7 +443,6 @@ ff1_sample6_aes192_test() ->
         digit_list_to_number(36, [33, 11, 19, 3, 20, 31, 3, 5, 19, 27, 10, 32,
                                   33, 31, 3, 2, 34, 28, 27]),
     run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
--endif.
 
 -spec ff1_sample7_aes256_test() -> ok.
 ff1_sample7_aes256_test() ->
