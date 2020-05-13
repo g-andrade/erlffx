@@ -196,7 +196,7 @@ fk(Config, P, RoundIndex, B_Value) ->
        value_length := ValueLength } = Config,
     ParamT = iolist_size(Tweak),
     ParamBeta = ?DIV_BY_2(ValueLength + 1),
-    ParamB = ?DIV_BY_8(ceil(ParamBeta * log2(Radix)) + 7),
+    ParamB = ?DIV_BY_8(ceil(ParamBeta * math:log2(Radix)) + 7),
     ParamD = 4 * ?DIV_BY_4(ParamB + 3),
     ParamM = ?DIV_BY_2(ValueLength + (RoundIndex band 1)),
 
@@ -244,13 +244,6 @@ ceil(V) ->
         true -> trunc(V + 1);
         false -> trunc(V)
     end.
--endif.
-
--spec log2(radix()) -> float().
--ifdef(pre18).
-log2(V) -> math:log(V) / math:log(2).
--else.
-log2(V) -> math:log2(V).
 -endif.
 
 -spec generate_p(config()) -> p_value().
