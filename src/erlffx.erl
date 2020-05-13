@@ -263,8 +263,23 @@ generate_p(#{ tweak := Tweak,
              Encrypted :: binary().
 aes_cbc_mac(#{ aes_key := AesKey }, ToEncrypt) ->
     IVec = zeroed_binary(16),
-    Encrypted = crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt),
+    Encrypted = aes_cbc(AesKey, IVec, ToEncrypt),
     binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
+
+-spec aes_cbc(iodata(), binary(), iodata()) -> binary().
+-ifdef(POST_OTP_22).
+aes_cbc(AesKey, IVec, ToEncrypt) ->
+    Cipher =
+        case byte_size(AesKey) of
+            16 -> aes_128_cbc;
+            24 -> aes_192_cbc;
+            32 -> aes_256_cbc
+        end,
+    crypto:crypto_one_time(Cipher, AesKey, IVec, ToEncrypt, true).
+-else.
+aes_cbc(AesKey, IVec, ToEncrypt) ->
+    crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt).
+-endif.
 
 -spec zeroed_binary(N :: non_neg_integer()) -> binary().
 zeroed_binary(N) ->
