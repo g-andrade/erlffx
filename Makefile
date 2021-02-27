@@ -46,4 +46,4 @@ test: $(REBAR3)
 	@$(REBAR3) eunit
 
 publish: $(REBAR3)
-	@$(REBAR3) as publish hex publish
+	@$(REBAR3) hex publish
