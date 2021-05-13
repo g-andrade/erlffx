@@ -1,6 +1,7 @@
 # erlffx
 
------
+[![](https://img.shields.io/hexpm/v/erlffx.svg?style=flat)](https://hex.pm/packages/erlffx)
+[![](https://github.com/g-andrade/erlffx/workflows/build/badge.svg)](https://github.com/g-andrade/erlffx/actions?query=workflow%3Abuild)
 
 `erlffx` is an Erlang implementation of the mechanism described in the
 2010 paper [The FFX Mode of Operation for Format-Preserving
