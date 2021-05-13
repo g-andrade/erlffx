@@ -1,8 +1,5 @@
-@author Guilherme Andrade <erlffx(at)gandrade(dot)net>
-@copyright 2017-2021 Guilherme Andrade
-@version 1.1.1
 @title erlffx
-@doc `erlffx': Format Preserving Encryption - FFX for Erlang
+@doc
 
 <hr/>
 
@@ -19,7 +16,7 @@ The code was successfully tested on generations 17, 18 and 19 of Erlang/OTP; the
 * <a href="http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf">FF1 samples</a>
 
 == Examples ==
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 10-digit decimal words
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 10,
@@ -31,7 +28,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 <hr/>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 10-digit decimal words / custom tweak
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 10,
@@ -43,7 +40,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 <hr/>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 16-digit base-36 words / custom tweak
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 16,
@@ -55,7 +52,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
 
 <hr/>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-256 CBC / 6-digit binary words
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60,
            239,67,89,216,213,128,170,79,127,3,109,111,4,252,106,148&gt;&gt;,
