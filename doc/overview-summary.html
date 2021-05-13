@@ -8,12 +8,12 @@
 <body bgcolor="white">
 <div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
 <h1>erlffx</h1>
-<p>Copyright © 2017-2021 Guilherme Andrade</p>
-<p><b>Version:</b> 1.1.1</p>
-<p><b>Authors:</b> Guilherme Andrade (<a href="mailto:erlffx(at)gandrade(dot)net"><tt>erlffx(at)gandrade(dot)net</tt></a>).</p>
-<p><code>erlffx</code>: Format Preserving Encryption - FFX for Erlang</p>
 
-<hr>
+
+<p><a target="_parent" href="https://hex.pm/packages/erlffx" alt="Hex.pm Package">
+    <img src="https://img.shields.io/hexpm/v/erlffx.svg?style=flat"></a>
+<a target="_parent" href="https://github.com/g-andrade/erlffx/actions?query=workflow%3Abuild" alt="Travis CI Build Status">
+    <img src="https://github.com/g-andrade/erlffx/workflows/build/badge.svg"></a></p>
 
 <p><code>erlffx</code> is an Erlang implementation of the mechanism described in the 2010 paper <a href="http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.304.1736&amp;rep=rep1&amp;type=pdf">The FFX Mode of Operation for Format-Preserving Encryption</a> by Bellare, Rogaway and Spies. It is based on an existing <a href="https://github.com/michaeltandy/java-ffx-format-preserving-encryption">Java implementation</a> by Michael Tandy.</p>
 
@@ -28,7 +28,7 @@
 * <a href="http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf">FF1 samples</a></p>
 
 <h3><a name="Examples">Examples</a></h3>
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 10-digit decimal words
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 10,
@@ -40,7 +40,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 <hr>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 10-digit decimal words / custom tweak
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 10,
@@ -52,7 +52,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted). % 123456789
 
 <hr>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-128 CBC / 16-digit base-36 words / custom tweak
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60&gt;&gt;,
 ValueLength = 16,
@@ -64,7 +64,7 @@ Decrypted = erlffx:decrypt(Config, Encrypted).           % 36#C4XPWULBM3M863JH
 
 <hr>
 
-<pre lang="erlang">
+<pre lang="erlang" class="erlang">
 % AES-256 CBC / 6-digit binary words
 AesKey = &lt;&lt;43,126,21,22,40,174,210,166,171,247,21,136,9,207,79,60,
            239,67,89,216,213,128,170,79,127,3,109,111,4,252,106,148&gt;&gt;,

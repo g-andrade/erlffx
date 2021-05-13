@@ -14,4 +14,3 @@ erl_crash.dump
 logs
 _build
 .idea
-doc/overview.edoc
