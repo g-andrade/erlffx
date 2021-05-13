@@ -226,20 +226,6 @@ fk(Config, P, RoundIndex, B_Value) ->
           integer_to_list(ParamZ, Radix)]),
     ParamZ.
 
--ifndef(POST_OTP_19).
--spec ceil(float()) -> integer().
-ceil(V) when V < 0.0 ->
-    case (V - trunc(V)) >= -0.5 of
-        true -> trunc(V);
-        false -> trunc(V - 1)
-    end;
-ceil(V) ->
-    case (V - trunc(V)) >= 0.5 of
-        true -> trunc(V + 1);
-        false -> trunc(V)
-    end.
--endif.
-
 -spec generate_p(config()) -> p_value().
 generate_p(#{ tweak := Tweak,
               radix := Radix,
