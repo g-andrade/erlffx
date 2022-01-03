@@ -2,7 +2,7 @@
 
 # erlffx #
 
-Copyright (c) 2017-2021 Guilherme Andrade
+Copyright (c) 2017-2022 Guilherme Andrade
 
 __Version:__ 1.1.1
 
