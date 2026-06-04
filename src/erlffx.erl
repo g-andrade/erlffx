@@ -2,6 +2,24 @@
 -author('Guilherme Andrade <erlffx(at)gandrade(dot)net>').
 -compile([inline, inline_list_funcs]).
 
+-ifdef(E48).
+-moduledoc """
+Format-preserving encryption using the FFX mode of operation.
+
+`erlffx` implements the mechanism described in the 2010 paper
+[The FFX Mode of Operation for Format-Preserving Encryption](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/proposed-modes/ffx/ffx-spec.pdf)
+by Bellare, Rogaway and Spies. It enciphers a non-negative integer into
+another integer of the same length, under a chosen radix, so the ciphertext
+keeps the format of the plaintext. See the [README](readme.html) for examples.
+
+- AES-128 / AES-192 / AES-256 keys are supported (CBC mode).
+- Any positive word length is supported.
+- Any radix / alphabet size between 2 and 255 is acceptable (10 by default).
+- Optional 'tweak' values may be defined.
+- The number of Feistel rounds is configurable (10 by default).
+""".
+-endif.
+
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
@@ -63,6 +81,11 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
+-ifdef(E48).
+-doc """
+Like `config/3` but with default optional parameters.
+""".
+-endif.
 -spec config(AesKey, ValueLength) -> Config
         when AesKey :: iodata(),
              ValueLength :: pos_integer(),
@@ -70,6 +93,18 @@
 config(AesKey, ValueLength) ->
     config(AesKey, ValueLength, #{}).
 
+-ifdef(E48).
+-doc """
+Builds an opaque encryption `t:config/0`.
+
+- `AesKey` must be a 16-, 24- or 32-byte (AES-128/192/256) key.
+- `ValueLength` is the word length, in digits of the chosen radix.
+- `OptionalParams` may set the `tweak`, the `radix` (2..255, default 10) and
+  the `number_of_rounds` (default 10).
+
+The same `t:config/0` must be used to `encrypt/2` and `decrypt/2` a value.
+""".
+-endif.
 -spec config(AesKey, ValueLength, OptionalParams) -> Config
         when AesKey :: iodata(),
              ValueLength :: pos_integer(),
@@ -82,6 +117,14 @@ config(AesKey, ValueLength, OptionalParams) ->
     Config = maps:merge(OptionalParams, MandatoryParams),
     validate_config(Config).
 
+-ifdef(E48).
+-doc """
+Enciphers the non-negative integer `Value` under `Config`.
+
+Returns an integer of the same word length and radix. Reverse it with
+`decrypt/2` using the same `t:config/0`.
+""".
+-endif.
 -spec encrypt(Config, Value) -> EncryptedValue
         when Config :: config(),
              Value :: non_neg_integer(),
@@ -100,6 +143,14 @@ encrypt(Config, Value) ->
     InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
     encrypt_loop(Config, P, 0, InitialA, InitialB).
 
+-ifdef(E48).
+-doc """
+Deciphers `EncryptedValue` produced by `encrypt/2`, recovering the original
+`Value`.
+
+Must be given the same `t:config/0` that produced the ciphertext.
+""".
+-endif.
 -spec decrypt(Config, EncryptedValue) -> Value
         when Config :: config(),
              EncryptedValue :: non_neg_integer(),
