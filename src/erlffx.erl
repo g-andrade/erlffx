@@ -290,7 +290,7 @@ fk(Config, P, RoundIndex, BValue) ->
         BBytes
     ],
 
-    ToEncrypt = iolist_to_binary([P, Q]),
+    ToEncrypt = [P, Q],
     Y = aes_cbc_mac(Config, ToEncrypt),
     assert(byte_size(Y) >= (ParamD + 4)),
 
@@ -329,20 +329,20 @@ generate_p(#{
         NumberOfRounds:8, SplitN:8, ValueLength:4/big-unsigned-integer-unit:8,
         TweakSize:4/big-unsigned-integer-unit:8>>.
 
--spec aes_cbc_mac(Config, ToEncrypt) -> Encrypted when
-    Config :: config(),
-    ToEncrypt :: binary(),
-    Encrypted :: binary().
+%-spec aes_cbc_mac(Config, ToEncrypt) -> Encrypted when
+%    Config :: config(),
+%    ToEncrypt :: iodata(),
+%    Encrypted :: binary().
 aes_cbc_mac(#{aes_key := AesKey}, ToEncrypt) ->
     IVec = zeroed_binary(16),
     Encrypted = aes_cbc(AesKey, IVec, ToEncrypt),
     binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
 
--spec aes_cbc(binary(), binary(), binary()) -> binary().
+%-spec aes_cbc(binary(), binary(), iodata()) -> binary().
 -ifdef(POST_OTP_22).
 aes_cbc(AesKey, IVec, ToEncrypt) ->
     Cipher =
-        case byte_size(AesKey) of
+        case iolist_size(AesKey) of
             16 -> aes_128_cbc;
             24 -> aes_192_cbc;
             32 -> aes_256_cbc
