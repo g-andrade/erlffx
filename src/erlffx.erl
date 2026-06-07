@@ -23,14 +23,19 @@ a chosen radix, so the ciphertext keeps the format of the plaintext. See the
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([config/2]).
--ignore_xref({config, 2}).
--export([config/3]).
--ignore_xref({config, 3}).
--export([encrypt/2]).
--ignore_xref({encrypt, 2}).
--export([decrypt/2]).
--ignore_xref({decrypt, 2}).
+-export([
+    config/2,
+    config/3,
+    encrypt/2,
+    decrypt/2
+]).
+
+-ignore_xref([
+    config/2,
+    config/3,
+    encrypt/2,
+    decrypt/2
+]).
 
 %% ------------------------------------------------------------------
 %% Macro Definitions
