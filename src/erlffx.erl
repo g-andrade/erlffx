@@ -1,16 +1,15 @@
 -module(erlffx).
--author('Guilherme Andrade <erlffx(at)gandrade(dot)net>').
 -compile([inline, inline_list_funcs]).
 
 -ifdef(E48).
 -moduledoc """
 Format-preserving encryption using the FFX mode of operation.
 
-`erlffx` implements the mechanism described in the 2010 paper
-[The FFX Mode of Operation for Format-Preserving Encryption](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/proposed-modes/ffx/ffx-spec.pdf)
-by Bellare, Rogaway and Spies. It enciphers a non-negative integer into
-another integer of the same length, under a chosen radix, so the ciphertext
-keeps the format of the plaintext. See the [README](readme.html) for examples.
+`erlffx` implements the mechanism described in the 2010 paper "The FFX Mode of
+Operation for Format-Preserving Encryption" by Bellare, Rogaway and Spies. It
+enciphers a non-negative integer into another integer of the same length, under
+a chosen radix, so the ciphertext keeps the format of the plaintext. See the
+[README](readme.html) for the paper link and examples.
 
 - AES-128 / AES-192 / AES-256 keys are supported (CBC mode).
 - Any positive word length is supported.
@@ -73,16 +72,28 @@ keeps the format of the plaintext. See the [README](readme.html) for examples.
 -export_type([optional_config_params/0]).
 
 -opaque config() :: #{
-    aes_key => iodata(),
-    value_length => pos_integer(),
+    aes_key := binary(),
+    value_length := pos_integer(),
+    tweak := iodata(),
+    radix := radix(),
+    number_of_rounds := non_neg_integer()
+}.
+-export_type([config/0]).
+
+% A config/3 map before validation: the mandatory params are always present,
+% the optional ones may not be yet.
+-type raw_config() :: #{
+    aes_key := iodata(),
+    value_length := pos_integer(),
     tweak => iodata(),
     radix => radix(),
     number_of_rounds => non_neg_integer()
 }.
--export_type([config/0]).
 
--type p_value() :: binary().
--type maginteger() :: {Value :: non_neg_integer(), Magnitude :: non_neg_integer()}.
+% The P value is always exactly 16 bytes (see generate_p/1).
+-type p_value() :: <<_:128>>.
+% The magnitude is always a positive power of the radix (see integer_pow/2).
+-type maginteger() :: {Value :: non_neg_integer(), Magnitude :: pos_integer()}.
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -146,12 +157,12 @@ encrypt(Config, Value) ->
         value_length := ValueLength
     } = Config,
     L = ?DIV_BY_2(ValueLength + 1),
-    InitialA_Magnitude = integer_pow(Radix, ValueLength - L),
-    InitialB_Magnitude = integer_pow(Radix, L),
-    InitialA_Value = Value div InitialB_Magnitude,
-    InitialB_Value = Value rem InitialB_Magnitude,
-    InitialA = maginteger(InitialA_Value, InitialA_Magnitude),
-    InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
+    InitialAMagnitude = integer_pow(Radix, ValueLength - L),
+    InitialBMagnitude = integer_pow(Radix, L),
+    InitialAValue = Value div InitialBMagnitude,
+    InitialBValue = Value rem InitialBMagnitude,
+    InitialA = maginteger(InitialAValue, InitialAMagnitude),
+    InitialB = maginteger(InitialBValue, InitialBMagnitude),
     encrypt_loop(Config, P, 0, InitialA, InitialB).
 
 -ifdef(E48).
@@ -175,19 +186,19 @@ decrypt(Config, EncryptedValue) ->
         number_of_rounds := NumberOfRounds
     } = Config,
     L = ?DIV_BY_2(ValueLength + 1),
-    InitialA_Magnitude = integer_pow(Radix, ValueLength - L),
-    InitialB_Magnitude = integer_pow(Radix, L),
-    InitialA_Value = EncryptedValue div InitialB_Magnitude,
-    InitialB_Value = EncryptedValue rem InitialB_Magnitude,
-    InitialA = maginteger(InitialA_Value, InitialA_Magnitude),
-    InitialB = maginteger(InitialB_Value, InitialB_Magnitude),
+    InitialAMagnitude = integer_pow(Radix, ValueLength - L),
+    InitialBMagnitude = integer_pow(Radix, L),
+    InitialAValue = EncryptedValue div InitialBMagnitude,
+    InitialBValue = EncryptedValue rem InitialBMagnitude,
+    InitialA = maginteger(InitialAValue, InitialAMagnitude),
+    InitialB = maginteger(InitialBValue, InitialBMagnitude),
     decrypt_loop(Config, P, NumberOfRounds - 1, InitialA, InitialB).
 
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
 
--spec validate_config(config()) -> config().
+-spec validate_config(raw_config()) -> config().
 validate_config(Config) ->
     #{
         aes_key => validate_aes_key(maps:get(aes_key, Config)),
@@ -197,10 +208,13 @@ validate_config(Config) ->
         number_of_rounds => validate_number_of_rounds(maps:get(number_of_rounds, Config, undefined))
     }.
 
--spec validate_aes_key(iodata()) -> iodata().
+-spec validate_aes_key(iodata()) -> binary().
 validate_aes_key(AesKey) ->
-    assert(lists:member(iolist_size(AesKey), [16, 24, 32])),
-    AesKey.
+    % Normalize to a binary so the CBC primitive (which uses byte_size/1) can
+    % accept any iodata() key.
+    Binary = iolist_to_binary(AesKey),
+    assert(lists:member(byte_size(Binary), [16, 24, 32])),
+    Binary.
 
 -spec validate_value_length(pos_integer()) -> pos_integer().
 validate_value_length(ValueLength) when is_integer(ValueLength), ValueLength > 0 ->
@@ -251,7 +265,7 @@ decrypt_loop(Config, P, RoundIndex, A, B) ->
     decrypt_loop(Config, P, RoundIndex - 1, NewA, NewB).
 
 -spec fk(config(), p_value(), non_neg_integer(), non_neg_integer()) -> non_neg_integer().
-fk(Config, P, RoundIndex, B_Value) ->
+fk(Config, P, RoundIndex, BValue) ->
     #{
         tweak := Tweak,
         radix := Radix,
@@ -263,25 +277,25 @@ fk(Config, P, RoundIndex, B_Value) ->
     ParamD = 4 * ?DIV_BY_4(ParamB + 3),
     ParamM = ?DIV_BY_2(ValueLength + (RoundIndex band 1)),
 
-    Tweak_PaddingLength = (-ParamT - ParamB - 1) band 16#0F,
-    B_Bytes = binary:encode_unsigned(B_Value, big),
-    assert(byte_size(B_Bytes) =< ParamB),
-    B_Bytes_PaddingLength = ParamB - byte_size(B_Bytes),
+    TweakPaddingLength = (-ParamT - ParamB - 1) band 16#0F,
+    BBytes = binary:encode_unsigned(BValue, big),
+    assert(byte_size(BBytes) =< ParamB),
+    BBytesPaddingLength = ParamB - byte_size(BBytes),
 
     Q = [
         Tweak,
-        zeroed_binary(Tweak_PaddingLength),
+        zeroed_binary(TweakPaddingLength),
         RoundIndex,
-        zeroed_binary(B_Bytes_PaddingLength),
-        B_Bytes
+        zeroed_binary(BBytesPaddingLength),
+        BBytes
     ],
 
-    ToEncrypt = [P, Q],
+    ToEncrypt = iolist_to_binary([P, Q]),
     Y = aes_cbc_mac(Config, ToEncrypt),
     assert(byte_size(Y) >= (ParamD + 4)),
 
-    ParamY_Bytes = binary:part(Y, {0, ParamD + 4}),
-    ParamY = binary:decode_unsigned(ParamY_Bytes, big),
+    ParamYBytes = binary:part(Y, {0, ParamD + 4}),
+    ParamY = binary:decode_unsigned(ParamYBytes, big),
     Divisor = integer_pow(Radix, ParamM),
     ParamZ = non_negative_rem(ParamY, Divisor),
 
@@ -294,7 +308,7 @@ fk(Config, P, RoundIndex, B_Value) ->
         "Output: ~p",
         [
             RoundIndex,
-            integer_to_list(B_Value, Radix),
+            integer_to_list(BValue, Radix),
             iolist_to_binary(Q),
             Y,
             integer_to_list(ParamZ, Radix)
@@ -317,14 +331,14 @@ generate_p(#{
 
 -spec aes_cbc_mac(Config, ToEncrypt) -> Encrypted when
     Config :: config(),
-    ToEncrypt :: iodata(),
+    ToEncrypt :: binary(),
     Encrypted :: binary().
 aes_cbc_mac(#{aes_key := AesKey}, ToEncrypt) ->
     IVec = zeroed_binary(16),
     Encrypted = aes_cbc(AesKey, IVec, ToEncrypt),
     binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
 
--spec aes_cbc(iodata(), binary(), iodata()) -> binary().
+-spec aes_cbc(binary(), binary(), binary()) -> binary().
 -ifdef(POST_OTP_22).
 aes_cbc(AesKey, IVec, ToEncrypt) ->
     Cipher =
@@ -344,9 +358,9 @@ zeroed_binary(N) ->
     <<<<0:8>> || _ <- lists:seq(1, N)>>.
 
 -spec integer_pow(Value, Power) -> Result when
-    Value :: integer(),
+    Value :: radix(),
     Power :: non_neg_integer(),
-    Result :: integer().
+    Result :: pos_integer().
 integer_pow(_Value, 0) ->
     1;
 integer_pow(Value, Power) when Power > 0 ->
@@ -366,21 +380,21 @@ non_negative_rem(A, B) when A >= 0, B > 0 ->
 
 -spec maginteger(Value, Magnitude) -> MagInteger when
     Value :: non_neg_integer(),
-    Magnitude :: non_neg_integer(),
+    Magnitude :: pos_integer(),
     MagInteger :: maginteger().
 maginteger(Value, Magnitude) ->
     {Value, Magnitude}.
 
 -spec maginteger_add(MagInteger1, Integer) -> MagInteger2 when
     MagInteger1 :: maginteger(),
-    Integer :: integer(),
+    Integer :: non_neg_integer(),
     MagInteger2 :: maginteger().
 maginteger_add({Value, Magnitude}, Integer) when is_integer(Integer) ->
     {non_negative_rem(Value + Integer, Magnitude), Magnitude}.
 
 -spec maginteger_sub(MagInteger1, Integer) -> MagInteger2 when
     MagInteger1 :: maginteger(),
-    Integer :: integer(),
+    Integer :: non_neg_integer(),
     MagInteger2 :: maginteger().
 maginteger_sub({Value, Magnitude}, Integer) when is_integer(Integer) ->
     {non_negative_rem(Value - Integer, Magnitude), Magnitude}.
@@ -389,317 +403,6 @@ maginteger_sub({Value, Magnitude}, Integer) when is_integer(Integer) ->
 maginteger_value({Value, _Magnitude}) ->
     Value.
 
--spec maginteger_magnitude(maginteger()) -> non_neg_integer().
+-spec maginteger_magnitude(maginteger()) -> pos_integer().
 maginteger_magnitude({_Value, Magnitude}) ->
     Magnitude.
-
-%% ------------------------------------------------------------------
-%% Unit Testing Function definitions
-%% ------------------------------------------------------------------
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-%-spec test() -> ok.
-
--spec run_encryptdecrypt_test_(erlffx:config(), non_neg_integer(), non_neg_integer()) -> ok.
-run_encryptdecrypt_test_(Config, Value, ExpectedEncryptedValue) ->
-    EncryptedValue = erlffx:encrypt(Config, Value),
-    ?assertEqual(EncryptedValue, ExpectedEncryptedValue),
-    DecryptedValue = erlffx:decrypt(Config, EncryptedValue),
-    ?assertEqual(DecryptedValue, Value).
-
--spec common_testing_aes128_key() -> binary().
-common_testing_aes128_key() ->
-    <<(16#2b7e151628aed2a6abf7158809cf4f3c):16/big-unsigned-integer-unit:8>>.
-
-%
-% http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ffx/aes-ffx-vectors.txt
-%
-
--spec aes_ffx_vector1_test() -> ok.
-aes_ffx_vector1_test() ->
-    Config =
-        config(
-            common_testing_aes128_key(),
-            10,
-            #{tweak => "9876543210"}
-        ),
-    run_encryptdecrypt_test_(Config, 123456789, 6124200773).
-
--spec aes_ffx_vector2_test() -> ok.
-aes_ffx_vector2_test() ->
-    Config = config(common_testing_aes128_key(), 10),
-    run_encryptdecrypt_test_(Config, 123456789, 2433477484).
-
--spec aes_ffx_vector3_test() -> ok.
-aes_ffx_vector3_test() ->
-    Config =
-        config(
-            common_testing_aes128_key(),
-            6,
-            #{tweak => "2718281828"}
-        ),
-    run_encryptdecrypt_test_(Config, 314159, 535005).
-
--spec aes_ffx_vector4_test() -> ok.
-aes_ffx_vector4_test() ->
-    Config =
-        config(
-            common_testing_aes128_key(),
-            9,
-            #{tweak => "7777777"}
-        ),
-    run_encryptdecrypt_test_(Config, 999999999, 658229573).
-
--spec aes_ffx_vector5_test() -> ok.
-aes_ffx_vector5_test() ->
-    Config =
-        config(
-            common_testing_aes128_key(),
-            16,
-            #{
-                tweak => "TQF9J5QDAGSCSPB1",
-                radix => 36
-            }
-        ),
-    run_encryptdecrypt_test_(Config, 36#C4XPWULBM3M863JH, 36#C8AQ3U846ZWH6QZP).
-
-%
-% http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/FF1samples.pdf
-%
-
--spec digit_list_in_radix(radix(), [0..254]) -> string().
-digit_list_in_radix(Radix, Digits) ->
-    lists:map(
-        fun(Digit) when Digit < Radix ->
-            [EncodedDigit] = integer_to_list(Digit, Radix),
-            EncodedDigit
-        end,
-        Digits
-    ).
-
--spec digit_list_to_number(radix(), [0..254]) -> non_neg_integer().
-digit_list_to_number(_Radix, []) ->
-    0;
-digit_list_to_number(Radix, Digits) ->
-    EncodedDigits = digit_list_in_radix(Radix, Digits),
-    list_to_integer(EncodedDigits, Radix).
-
--spec ff1_sample3_aes128_test() -> ok.
-ff1_sample3_aes128_test() ->
-    Config =
-        config(
-            common_testing_aes128_key(),
-            19,
-            #{
-                tweak =>
-                    <<16#37, 16#37, 16#37, 16#37, 16#70, 16#71, 16#72, 16#73, 16#37, 16#37, 16#37>>,
-                radix => 36
-            }
-        ),
-    EncryptedValue =
-        digit_list_to_number(36, [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18
-        ]),
-    DecryptedValue =
-        digit_list_to_number(36, [
-            10,
-            9,
-            29,
-            31,
-            4,
-            0,
-            22,
-            21,
-            21,
-            9,
-            20,
-            13,
-            30,
-            5,
-            0,
-            9,
-            14,
-            30,
-            22
-        ]),
-    run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
-
--spec ff1_sample4_aes192_test() -> ok.
-ff1_sample4_aes192_test() ->
-    Config =
-        config(
-            <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F:24/big-unsigned-integer-unit:8>>,
-            10
-        ),
-    run_encryptdecrypt_test_(Config, 123456789, 2830668132).
-
--spec ff1_sample5_aes192_test() -> ok.
-ff1_sample5_aes192_test() ->
-    Config =
-        config(
-            <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F:24/big-unsigned-integer-unit:8>>,
-            10,
-            #{tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>>}
-        ),
-    run_encryptdecrypt_test_(Config, 123456789, 2496655549).
-
--spec ff1_sample6_aes192_test() -> ok.
-ff1_sample6_aes192_test() ->
-    Config =
-        config(
-            <<16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F:24/big-unsigned-integer-unit:8>>,
-            19,
-            #{
-                tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
-                radix => 36
-            }
-        ),
-    EncryptedValue =
-        digit_list_to_number(36, [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18
-        ]),
-    DecryptedValue =
-        digit_list_to_number(36, [
-            33,
-            11,
-            19,
-            3,
-            20,
-            31,
-            3,
-            5,
-            19,
-            27,
-            10,
-            32,
-            33,
-            31,
-            3,
-            2,
-            34,
-            28,
-            27
-        ]),
-    run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
-
--spec ff1_sample7_aes256_test() -> ok.
-ff1_sample7_aes256_test() ->
-    Config =
-        config(
-            <<
-                16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94:32/big-unsigned-integer-unit:8
-            >>,
-            10
-        ),
-    run_encryptdecrypt_test_(Config, 123456789, 6657667009).
-
--spec ff1_sample8_aes256_test() -> ok.
-ff1_sample8_aes256_test() ->
-    Config =
-        config(
-            <<
-                16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94:32/big-unsigned-integer-unit:8
-            >>,
-            10,
-            #{tweak => <<16#39383736353433323130:10/big-unsigned-integer-unit:8>>}
-        ),
-    run_encryptdecrypt_test_(Config, 123456789, 1001623463).
-
--spec ff1_sample9_aes256_test() -> ok.
-ff1_sample9_aes256_test() ->
-    Config =
-        config(
-            <<
-                16#2B7E151628AED2A6ABF7158809CF4F3CEF4359D8D580AA4F7F036D6F04FC6A94:32/big-unsigned-integer-unit:8
-            >>,
-            19,
-            #{
-                tweak => <<16#3737373770717273373737:11/big-unsigned-integer-unit:8>>,
-                radix => 36
-            }
-        ),
-    EncryptedValue =
-        digit_list_to_number(36, [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18
-        ]),
-    DecryptedValue =
-        digit_list_to_number(36, [
-            33,
-            28,
-            8,
-            10,
-            0,
-            10,
-            35,
-            17,
-            2,
-            10,
-            31,
-            34,
-            10,
-            21,
-            34,
-            35,
-            30,
-            32,
-            13
-        ]),
-    run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
-
--endif.
