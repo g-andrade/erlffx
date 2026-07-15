@@ -26,9 +26,10 @@ All checks run sequentially (`.NOTPARALLEL`). CI runs `make check-fast`,
 ## Compiler flags
 
 Always on: `warn_export_vars`, `warn_missing_spec`, `warn_unused_import`,
-`warnings_as_errors`. Every function (including internal helpers) carries a
-`-spec`. The `test` profile relaxes `warn_missing_spec` and
-`warnings_as_errors`.
+`warnings_as_errors`. `warn_missing_spec` only requires specs on **exported**
+functions, so the public API and the `validate_*` helpers are spec'd, but the
+internal round/PRF helpers (`do_encdec/7`, `do_encrypt_rounds/5`, etc.) are not.
+The `test` profile relaxes `warn_missing_spec` and `warnings_as_errors`.
 
 ## Architecture
 
@@ -41,10 +42,27 @@ There is one module, `erlffx`, with a four-function public API:
 | `decrypt/2` | Reverse `encrypt/2` |
 
 Internally: `config/3` merges params into a `raw_config()` map and validates it
-into the opaque `config()` (mandatory keys). `encrypt`/`decrypt` run the
-alternating Feistel network (`encrypt_loop`/`decrypt_loop`); each round's PRF
-`fk/4` builds the FFX `P`/`Q` blocks and runs AES-CBC-MAC (`aes_cbc_mac/2` →
-`aes_cbc/3`). Integers are carried as `maginteger()` `{Value, Magnitude}` pairs.
+into the opaque `config()` (mandatory keys). Both `encrypt/2` and `decrypt/2`
+delegate to `do_encdec/7` (a `DoEncrypt` boolean picks the direction).
+`setup_encdec_vars/6` derives the per-call parameters into an `#aux{}` record
+(`u`/`v` halves, `small_b`, `d`, the `P` block, the `Q` zero-padding) and splits
+the input integer into its `{A, B}` halves via `split_num_string_int/3`. The
+Feistel network then runs as `do_encrypt_rounds/5` (rounds `0..NumberOfRounds-1`)
+or `do_decrypt_rounds/4` (rounds counting back down to `-1`). Each round builds
+the FFX `P || Q` blocks, computes `R = prf/2` (AES-CBC-MAC: `crypto_one_time/5`
+in CBC mode, keeping the last 16 bytes), expands it to `S` with
+`compute_s_blocks/3` (`R || CIPH(R⊕1) || …` using `ciph/2`, AES-ECB), and folds
+`Y = NUM(S)` into the running half with `non_negative_rem/2` (addition when
+encrypting, subtraction when decrypting) modulo `radix^m`. The result is
+reconstructed as `FinalB + FinalA * radix^v`. Integers are plain Erlang
+integers throughout — the earlier `maginteger()` `{Value, Magnitude}` pairs are
+gone.
+
+> **`non_negative_rem/2` gotcha:** it must fold the result fully into `[0, B)`
+> via `((A rem B) + B) rem B`. A negative `A` that is an exact multiple of `B`
+> makes `A rem B` zero, so the naïve `(A rem B) + B` wrongly returns `B` — which
+> broke `decrypt/2` round-trips for the rare inputs where `B - Y` lands on an
+> exact multiple of `radix^m`.
 
 ## Conventions and gotchas
 
@@ -53,10 +71,10 @@ alternating Feistel network (`encrypt_loop`/`decrypt_loop`); each round's PRF
   26 (its `-doc` triple-quoted-string handling is broken there); `rebar3_hank`
   is dropped on OTP 29 (katana_code bug). So `make check-fast` is a partial
   no-op on those OTP releases — develop/lint on OTP 27+ (28 is the reference).
-- **Crypto API split**: `aes_cbc/3` uses `crypto:crypto_one_time/5` on OTP ≥ 23
-  and the removed `crypto:block_encrypt/4` on OTP 22, selected by the
-  `POST_OTP_22` `platform_define`. `minimum_otp_vsn` is `22.0` but only **24+**
-  is supported.
+- **Crypto**: `prf/2` and `ciph/2` call `crypto:crypto_one_time/5`
+  unconditionally (no OTP 22 `crypto:block_encrypt/4` fallback anymore). The old
+  `POST_OTP_22` `platform_define` is gone and `minimum_otp_vsn` is `24.0`, which
+  matches what is actually supported.
 - **Docs are EEP-48**, not edoc text. Public docs are `-moduledoc`/`-doc`
   triple-quoted attributes guarded by `-ifdef(E48).` (`E48` is defined on OTP
   27+). The internal helpers are simply unexported, so ex_doc omits them — no
@@ -72,10 +90,11 @@ alternating Feistel network (`encrypt_loop`/`decrypt_loop`); each round's PRF
   `dont_repeat_yourself` and `max_line_length` because the known-answer test
   vectors are intentionally repetitive and carry long literals (256-bit keys,
   digit lists). `src/` uses the default ruleset with no exceptions.
-- **dialyzer** runs with `underspecs` on. Keep specs tight: the P value is
-  `<<_:128>>`, magnitudes are `pos_integer()`, the opaque `config()` uses
-  mandatory (`:=`) keys, and the AES key/CBC data flow is typed over binaries
-  (`validate_aes_key/1` normalizes any `iodata()` key to a binary).
+- **dialyzer** runs with `underspecs` on. Keep specs tight: the opaque
+  `config()` uses mandatory (`:=`) keys, the `#aux{}` record fields are typed
+  (`u`/`v` as `pos_integer()`, `radix()`, binaries for `p`/`q_zeros`), and the
+  AES key flow is typed over binaries (`validate_aes_key/1` normalizes any
+  `iodata()` key to a binary).
 
 ## Tests
 

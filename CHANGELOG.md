@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 
 - max radix from 255 to 65535
+- minimum OTP version to 24
 - implementation to be in the spirit of
   [`ex_fpe`](https://github.com/g-andrade/ex_fpe)
 

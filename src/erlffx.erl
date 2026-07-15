@@ -13,7 +13,7 @@ a chosen radix, so the ciphertext keeps the format of the plaintext. See the
 
 - AES-128 / AES-192 / AES-256 keys are supported (CBC mode).
 - Any positive word length is supported.
-- Any radix / alphabet size between 2 and 255 is acceptable (10 by default).
+- Any radix / alphabet size between 2 and 65535 is acceptable (10 by default).
 - Optional 'tweak' values may be defined.
 - The number of Feistel rounds is configurable (10 by default).
 """.
@@ -120,7 +120,7 @@ Builds an opaque encryption `t:config/0`.
 
 - `AesKey` must be a 16-, 24- or 32-byte (AES-128/192/256) key.
 - `ValueLength` is the word length, in digits of the chosen radix.
-- `OptionalParams` may set the `tweak`, the `radix` (2..255, default 10) and
+- `OptionalParams` may set the `tweak`, the `radix` (2..65535, default 10) and
   the `number_of_rounds` (default 10).
 
 The same `t:config/0` must be used to `encrypt/2` and `decrypt/2` a value.

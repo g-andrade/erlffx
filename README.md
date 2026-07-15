@@ -7,13 +7,12 @@
 `erlffx` is an Erlang implementation of the mechanism described in the 2010
 paper [The FFX Mode of Operation for Format-Preserving
 Encryption](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/proposed-modes/ffx/ffx-spec.pdf)
-by Bellare, Rogaway and Spies. It is based on an existing [Java
-implementation](https://github.com/michaeltandy/java-ffx-format-preserving-encryption)
-by Michael Tandy.
+by Bellare, Rogaway and Spies. Its algorithm follows the sibling Elixir
+library [`ex_fpe`](https://github.com/g-andrade/ex_fpe).
 
 * AES-128 / AES-192 / AES-256 keys are supported (CBC mode)
 * Any positive word length is supported
-* Any radix / alphabet size between 2 and 255 is acceptable (10 by default)
+* Any radix / alphabet size between 2 and 65535 is acceptable (10 by default)
 * Optional 'tweak' values may be defined
 * The number of rounds is configurable (10 by default)
 
