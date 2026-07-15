@@ -46,27 +46,18 @@ a chosen radix, so the ciphertext keeps the format of the plaintext. See the
 -define(METHOD_ALTERNATING_FEISTEL, 2).
 
 -define(MIN_RADIX, 2).
--define(MAX_RADIX, 255).
+-define(MAX_RADIX, 65535).
 
 -define(DEFAULT_RADIX, 10).
 -define(DEFAULT_NUMBER_OF_ROUNDS, 10).
 
--define(DIV_BY_2(V), ((V) bsr 1)).
--define(DIV_BY_4(V), ((V) bsr 2)).
--define(DIV_BY_8(V), ((V) bsr 3)).
-
--ifdef(TEST).
--define(LOG(Fmt, Params), io:format(Fmt ++ "~n", Params)).
--else.
--define(LOG(Fmt, Params), ok).
--endif.
+% -define(LOG(Fmt, Params), io:format(Fmt ++ "~n", Params)).
 
 %% ------------------------------------------------------------------
 %% Type Definitions
 %% ------------------------------------------------------------------
 
-%-type radix() :: ?MIN_RADIX..?MAX_RADIX. % otherwise edoc blows up
--type radix() :: 2..255.
+-type radix() :: ?MIN_RADIX..?MAX_RADIX.
 -export_type([radix/0]).
 
 -type optional_config_params() :: #{
@@ -95,10 +86,17 @@ a chosen radix, so the ciphertext keeps the format of the plaintext. See the
     number_of_rounds => non_neg_integer()
 }.
 
-% The P value is always exactly 16 bytes (see generate_p/1).
--type p_value() :: <<_:128>>.
-% The magnitude is always a positive power of the radix (see integer_pow/2).
--type maginteger() :: {Value :: non_neg_integer(), Magnitude :: pos_integer()}.
+-record(aux, {
+    key :: binary(),
+    radix :: radix(),
+    tweak_vec :: iolist() | binary(),
+    u :: pos_integer(),
+    v :: pos_integer(),
+    small_b :: non_neg_integer(),
+    d :: non_neg_integer(),
+    p :: binary(),
+    q_zeros :: binary()
+}).
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -155,20 +153,15 @@ Returns an integer of the same word length and radix. Reverse it with
     Value :: non_neg_integer(),
     EncryptedValue :: non_neg_integer().
 encrypt(Config, Value) ->
-    P = generate_p(Config),
-    ?LOG("P value: ~p", [P]),
     #{
+        aes_key := Key,
         radix := Radix,
-        value_length := ValueLength
+        tweak := Tweak,
+        value_length := ValueLength,
+        number_of_rounds := NumberOfRounds
     } = Config,
-    L = ?DIV_BY_2(ValueLength + 1),
-    InitialAMagnitude = integer_pow(Radix, ValueLength - L),
-    InitialBMagnitude = integer_pow(Radix, L),
-    InitialAValue = Value div InitialBMagnitude,
-    InitialBValue = Value rem InitialBMagnitude,
-    InitialA = maginteger(InitialAValue, InitialAMagnitude),
-    InitialB = maginteger(InitialBValue, InitialBMagnitude),
-    encrypt_loop(Config, P, 0, InitialA, InitialB).
+
+    do_encdec(Key, Radix, Tweak, NumberOfRounds, Value, ValueLength, true).
 
 -ifdef(E48).
 -doc """
@@ -183,21 +176,15 @@ Must be given the same `t:config/0` that produced the ciphertext.
     EncryptedValue :: non_neg_integer(),
     Value :: non_neg_integer().
 decrypt(Config, EncryptedValue) ->
-    P = generate_p(Config),
-    ?LOG("P value: ~p", [P]),
     #{
+        aes_key := Key,
         radix := Radix,
+        tweak := Tweak,
         value_length := ValueLength,
         number_of_rounds := NumberOfRounds
     } = Config,
-    L = ?DIV_BY_2(ValueLength + 1),
-    InitialAMagnitude = integer_pow(Radix, ValueLength - L),
-    InitialBMagnitude = integer_pow(Radix, L),
-    InitialAValue = EncryptedValue div InitialBMagnitude,
-    InitialBValue = EncryptedValue rem InitialBMagnitude,
-    InitialA = maginteger(InitialAValue, InitialAMagnitude),
-    InitialB = maginteger(InitialBValue, InitialBMagnitude),
-    decrypt_loop(Config, P, NumberOfRounds - 1, InitialA, InitialB).
+
+    do_encdec(Key, Radix, Tweak, NumberOfRounds, EncryptedValue, ValueLength, false).
 
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
@@ -243,124 +230,217 @@ validate_number_of_rounds(NumberOfRounds) when is_integer(NumberOfRounds), Numbe
 validate_number_of_rounds(undefined) ->
     ?DEFAULT_NUMBER_OF_ROUNDS.
 
--spec encrypt_loop(config(), p_value(), non_neg_integer(), maginteger(), maginteger()) ->
-    non_neg_integer().
-encrypt_loop(#{number_of_rounds := NumberOfRounds}, _P, RoundIndex, A, B) when
-    RoundIndex >= NumberOfRounds
-->
-    (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
-encrypt_loop(Config, P, RoundIndex, A, B) ->
-    FkValue = fk(Config, P, RoundIndex, maginteger_value(B)),
-    C = maginteger_add(A, FkValue),
-    NewA = B,
-    NewB = C,
-    encrypt_loop(Config, P, RoundIndex + 1, NewA, NewB).
+%%%%
 
--spec decrypt_loop(config(), p_value(), non_neg_integer() | -1, maginteger(), maginteger()) ->
-    non_neg_integer().
-decrypt_loop(_Config, _P, RoundIndex, A, B) when
-    RoundIndex < 0
-->
-    (maginteger_value(A) * maginteger_magnitude(B)) + maginteger_value(B);
-decrypt_loop(Config, P, RoundIndex, A, B) ->
-    C = B,
-    NewB = A,
-    FkValue = fk(Config, P, RoundIndex, maginteger_value(NewB)),
-    NewA = maginteger_sub(C, FkValue),
-    decrypt_loop(Config, P, RoundIndex - 1, NewA, NewB).
+do_encdec(Key, Radix, Tweak, NumberOfRounds, X, X_Length, DoEncrypt) ->
+    TweakVec = erlang:iolist_to_iovec(Tweak),
+    {Aux, A, B} = setup_encdec_vars(Key, Radix, TweakVec, NumberOfRounds, X, X_Length),
 
--spec fk(config(), p_value(), non_neg_integer(), non_neg_integer()) -> non_neg_integer().
-fk(Config, P, RoundIndex, BValue) ->
-    #{
-        tweak := Tweak,
-        radix := Radix,
-        value_length := ValueLength
-    } = Config,
-    ParamT = iolist_size(Tweak),
-    ParamBeta = ?DIV_BY_2(ValueLength + 1),
-    ParamB = ?DIV_BY_8(ceil(ParamBeta * math:log2(Radix)) + 7),
-    ParamD = 4 * ?DIV_BY_4(ParamB + 3),
-    ParamM = ?DIV_BY_2(ValueLength + (RoundIndex band 1)),
+    {FinalA, FinalB} =
+        case DoEncrypt of
+            true ->
+                do_encrypt_rounds(Aux, 0, NumberOfRounds, A, B);
+            %
+            false ->
+                do_decrypt_rounds(Aux, NumberOfRounds - 1, A, B)
+        end,
 
-    TweakPaddingLength = (-ParamT - ParamB - 1) band 16#0F,
-    BBytes = binary:encode_unsigned(BValue, big),
-    assert(byte_size(BBytes) =< ParamB),
-    BBytesPaddingLength = ParamB - byte_size(BBytes),
+    %%
+    FinalB + (FinalA * integer_pow(Radix, Aux#aux.v)).
 
-    Q = [
-        Tweak,
-        zeroed_binary(TweakPaddingLength),
-        RoundIndex,
-        zeroed_binary(BBytesPaddingLength),
-        BBytes
+%%%%
+
+setup_encdec_vars(Key, Radix, Tweak, NumberOfRounds, X, X_Length) ->
+    N = X_Length,
+
+    TweakVec = erlang:iolist_to_iovec(Tweak),
+    T = iolist_size(Tweak),
+
+    U = N div 2,
+    V = N - U,
+
+    {A, B} = split_num_string_int(Radix, X, V),
+
+    SmallB = byte_size(binary:encode_unsigned(integer_pow(Radix, V) - 1)),
+
+    D = (4 * ((SmallB + 3) div 4)) + 4,
+
+    P = <<
+        ?VERSION,
+        ?METHOD_ALTERNATING_FEISTEL,
+        ?ADDITION_BLOCKWISE,
+        Radix:24,
+        NumberOfRounds,
+        (non_negative_rem(U, 256)),
+        N:32,
+        T:32
+    >>,
+
+    Q_Zeros_Size = non_negative_rem(-T - SmallB - 1, 16),
+    Q_Zeros = <<0:Q_Zeros_Size/unsigned-unit:8>>,
+
+    Aux =
+        #aux{
+            key = Key,
+            radix = Radix,
+            tweak_vec = TweakVec,
+            u = U,
+            v = V,
+            small_b = SmallB,
+            d = D,
+            p = P,
+            q_zeros = Q_Zeros
+        },
+
+    {Aux, A, B}.
+
+split_num_string_int(Radix, X, B_Length) ->
+    split_num_string_int_recur(Radix, X, 0, 0, B_Length).
+
+split_num_string_int_recur(Radix, A, B, N, Amount) when N < Amount ->
+    Digit = A rem Radix,
+    UpdatedA = A div Radix,
+    UpdatedB = B + (Digit * integer_pow(Radix, N)),
+    split_num_string_int_recur(Radix, UpdatedA, UpdatedB, N + 1, Amount);
+split_num_string_int_recur(_Radix, A, B, _N, _Amount) ->
+    {A, B}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+do_encrypt_rounds(Aux, I, NumberOfRounds, A, B) when I < NumberOfRounds ->
+    #aux{
+        key = Key,
+        radix = Radix,
+        tweak_vec = TweakVec,
+        u = U,
+        v = V,
+        small_b = SmallB,
+        d = D,
+        p = P,
+        q_zeros = Q_Zeros
+    } = Aux,
+
+    %%
+
+    PRF_Arg2 = [
+        P,
+        % Q var
+        TweakVec,
+        Q_Zeros,
+        I,
+        <<B:SmallB/unsigned-unit:8>>
     ],
 
-    ToEncrypt = [P, Q],
-    Y = aes_cbc_mac(Config, ToEncrypt),
-    assert(byte_size(Y) >= (ParamD + 4)),
+    R = prf(Key, PRF_Arg2),
 
-    ParamYBytes = binary:part(Y, {0, ParamD + 4}),
-    ParamY = binary:decode_unsigned(ParamYBytes, big),
-    Divisor = integer_pow(Radix, ParamM),
-    ParamZ = non_negative_rem(ParamY, Divisor),
+    S_Blocks = compute_s_blocks(Key, D, R),
+    S = binary_part(S_Blocks, 0, D),
 
-    ?LOG(
-        "-----------------------~n"
-        "RoundIndex: ~p~n"
-        "B value: ~p~n"
-        "Q value: ~p~n"
-        "CBC-MAC value: ~p~n"
-        "Output: ~p",
-        [
-            RoundIndex,
-            integer_to_list(BValue, Radix),
-            iolist_to_binary(Q),
-            Y,
-            integer_to_list(ParamZ, Radix)
-        ]
-    ),
-    ParamZ.
+    Y = binary:decode_unsigned(S),
 
--spec generate_p(config()) -> p_value().
-generate_p(#{
-    tweak := Tweak,
-    radix := Radix,
-    value_length := ValueLength,
-    number_of_rounds := NumberOfRounds
-}) ->
-    TweakSize = iolist_size(Tweak),
-    SplitN = (?DIV_BY_2(ValueLength) band 16#FF),
-    <<?VERSION:8, ?METHOD_ALTERNATING_FEISTEL:8, ?ADDITION_BLOCKWISE:8, 0:16, Radix:8,
-        NumberOfRounds:8, SplitN:8, ValueLength:4/big-unsigned-integer-unit:8,
-        TweakSize:4/big-unsigned-integer-unit:8>>.
-
-%-spec aes_cbc_mac(Config, ToEncrypt) -> Encrypted when
-%    Config :: config(),
-%    ToEncrypt :: iodata(),
-%    Encrypted :: binary().
-aes_cbc_mac(#{aes_key := AesKey}, ToEncrypt) ->
-    IVec = zeroed_binary(16),
-    Encrypted = aes_cbc(AesKey, IVec, ToEncrypt),
-    binary:part(Encrypted, {byte_size(Encrypted) - 16, 16}).
-
-%-spec aes_cbc(binary(), binary(), iodata()) -> binary().
--ifdef(POST_OTP_22).
-aes_cbc(AesKey, IVec, ToEncrypt) ->
-    Cipher =
-        case iolist_size(AesKey) of
-            16 -> aes_128_cbc;
-            24 -> aes_192_cbc;
-            32 -> aes_256_cbc
+    M =
+        case (I band 1) of
+            0 ->
+                U;
+            %
+            _ ->
+                V
         end,
-    crypto:crypto_one_time(Cipher, AesKey, IVec, ToEncrypt, true).
--else.
-aes_cbc(AesKey, IVec, ToEncrypt) ->
-    crypto:block_encrypt(aes_cbc, AesKey, IVec, ToEncrypt).
--endif.
 
--spec zeroed_binary(N :: non_neg_integer()) -> binary().
-zeroed_binary(N) ->
-    <<<<0:8>> || _ <- lists:seq(1, N)>>.
+    SmallC = non_negative_rem(A + Y, integer_pow(Radix, M)),
+
+    C = SmallC,
+
+    UpdatedA = B,
+    UpdatedB = C,
+
+    do_encrypt_rounds(Aux, I + 1, NumberOfRounds, UpdatedA, UpdatedB);
+%
+do_encrypt_rounds(_Aux, I, NumberOfRounds, A, B) when I =:= NumberOfRounds ->
+    {A, B}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+do_decrypt_rounds(Aux, I, A, B) when I >= 0 ->
+    #aux{
+        key = Key,
+        radix = Radix,
+        tweak_vec = TweakVec,
+        u = U,
+        v = V,
+        small_b = SmallB,
+        d = D,
+        p = P,
+        q_zeros = Q_Zeros
+    } = Aux,
+
+    %%
+
+    PRF_Arg2 = [
+        P,
+        % Q var
+        TweakVec,
+        Q_Zeros,
+        I,
+        <<A:SmallB/unsigned-unit:8>>
+    ],
+
+    R = prf(Key, PRF_Arg2),
+
+    S_Blocks = compute_s_blocks(Key, D, R),
+    S = binary_part(S_Blocks, 0, D),
+
+    Y = binary:decode_unsigned(S),
+
+    M =
+        case (I band 1) of
+            0 ->
+                U;
+            %
+            _ ->
+                V
+        end,
+
+    SmallC = non_negative_rem(B - Y, integer_pow(Radix, M)),
+
+    C = SmallC,
+
+    UpdatedB = A,
+    UpdatedA = C,
+
+    do_decrypt_rounds(Aux, I - 1, UpdatedA, UpdatedB);
+%
+do_decrypt_rounds(_Aux, I, A, B) when I =:= -1 ->
+    {A, B}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+prf(Key, X) ->
+    Cipher = map_get(bit_size(Key), #{128 => aes_128_cbc, 192 => aes_192_cbc, 256 => aes_256_cbc}),
+
+    CT = crypto:crypto_one_time(Cipher, Key, <<0:128>>, X, true),
+    binary_part(CT, byte_size(CT) - 16, 16).
+
+ciph(Key, X) ->
+    Cipher = map_get(bit_size(Key), #{128 => aes_128_ecb, 192 => aes_192_ecb, 256 => aes_256_ecb}),
+    crypto:crypto_one_time(Cipher, Key, X, true).
+
+compute_s_blocks(Key, SmallD, BigR) ->
+    LastIndex = ((SmallD + 15) div 16) - 1,
+    AccSize = byte_size(BigR),
+    iolist_to_binary([BigR | compute_s_blocks_recur(Key, SmallD, BigR, AccSize, 1, LastIndex)]).
+
+compute_s_blocks_recur(Key, SmallD, BigR, AccSize, Index, LastIndex) when
+    Index =< LastIndex, AccSize < SmallD
+->
+    [
+        ciph(Key, crypto:exor(BigR, <<Index:16/unsigned-unit:8>>))
+        | compute_s_blocks_recur(Key, SmallD, BigR, AccSize + 16, Index + 1, LastIndex)
+    ];
+compute_s_blocks_recur(_Key, _SmallD, _BigR, _AccSize, _Index, _LastIndex) ->
+    [].
+
+%%%%
 
 -spec integer_pow(Value, Power) -> Result when
     Value :: radix(),
@@ -378,36 +458,9 @@ assert(true) -> ok.
     A :: integer(),
     B :: pos_integer(),
     Rem :: non_neg_integer().
-non_negative_rem(A, B) when A < 0, B > 0 ->
-    (A rem B) + B;
-non_negative_rem(A, B) when A >= 0, B > 0 ->
-    A rem B.
-
--spec maginteger(Value, Magnitude) -> MagInteger when
-    Value :: non_neg_integer(),
-    Magnitude :: pos_integer(),
-    MagInteger :: maginteger().
-maginteger(Value, Magnitude) ->
-    {Value, Magnitude}.
-
--spec maginteger_add(MagInteger1, Integer) -> MagInteger2 when
-    MagInteger1 :: maginteger(),
-    Integer :: non_neg_integer(),
-    MagInteger2 :: maginteger().
-maginteger_add({Value, Magnitude}, Integer) when is_integer(Integer) ->
-    {non_negative_rem(Value + Integer, Magnitude), Magnitude}.
-
--spec maginteger_sub(MagInteger1, Integer) -> MagInteger2 when
-    MagInteger1 :: maginteger(),
-    Integer :: non_neg_integer(),
-    MagInteger2 :: maginteger().
-maginteger_sub({Value, Magnitude}, Integer) when is_integer(Integer) ->
-    {non_negative_rem(Value - Integer, Magnitude), Magnitude}.
-
--spec maginteger_value(maginteger()) -> non_neg_integer().
-maginteger_value({Value, _Magnitude}) ->
-    Value.
-
--spec maginteger_magnitude(maginteger()) -> pos_integer().
-maginteger_magnitude({_Value, Magnitude}) ->
-    Magnitude.
+non_negative_rem(A, B) when B > 0 ->
+    % Erlang's `rem` follows the sign of the dividend, so for negative A it
+    % yields a value in (-B, 0]. Adding B and taking `rem` again folds every
+    % case into [0, B) -- crucially, when A is an exact negative multiple of B,
+    % `A rem B` is 0 and the naive `(A rem B) + B` would wrongly return B.
+    ((A rem B) + B) rem B.

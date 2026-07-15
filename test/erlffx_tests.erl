@@ -8,9 +8,9 @@
 
 run_encryptdecrypt_test_(Config, Value, ExpectedEncryptedValue) ->
     EncryptedValue = erlffx:encrypt(Config, Value),
-    ?assertEqual(EncryptedValue, ExpectedEncryptedValue),
+    ?assertEqual(ExpectedEncryptedValue, EncryptedValue),
     DecryptedValue = erlffx:decrypt(Config, EncryptedValue),
-    ?assertEqual(DecryptedValue, Value).
+    ?assertEqual(Value, DecryptedValue).
 
 common_testing_aes128_key() ->
     <<(16#2b7e151628aed2a6abf7158809cf4f3c):16/big-unsigned-integer-unit:8>>.
@@ -177,3 +177,113 @@ ff1_sample9_aes256_test() ->
             33, 28, 8, 10, 0, 10, 35, 17, 2, 10, 31, 34, 10, 21, 34, 35, 30, 32, 13
         ]),
     run_encryptdecrypt_test_(Config, EncryptedValue, DecryptedValue).
+
+%% ------------------------------------------------------------------
+%% Others
+%% ------------------------------------------------------------------
+
+large_s_block_test() ->
+    %
+    % Ensures coverage of the recursive `compute_s_blocks` case
+    %
+    AesKey =
+        <<121, 94, 3, 182, 203, 31, 247, 3, 116, 127, 231, 162, 173, 64, 161, 96, 122, 135, 89, 177,
+            94, 111, 98, 99, 43, 40, 1, 140, 9, 46, 242, 73>>,
+
+    Radix = 1166,
+    ValueLength = 42,
+    Tweak = "",
+
+    Config =
+        erlffx:config(
+            AesKey,
+            ValueLength,
+            #{radix => Radix, tweak => Tweak}
+        ),
+
+    Value = 1,
+    Encrypted = erlffx:encrypt(Config, Value),
+    Decrypted = erlffx:decrypt(Config, Encrypted),
+
+    ?assertEqual(1, Decrypted).
+
+random_cases_test() ->
+    MaxValue = 1 bsl 600,
+
+    lists:foreach(
+        fun(_) ->
+            Key = random_key(),
+            Radix = random_radix(),
+
+            MaxValueLength = floor(math:log(MaxValue) / math:log(Radix)),
+            ValueLength = rand:uniform(MaxValueLength),
+
+            Value = rand:uniform(int_pow(Radix, ValueLength)) - 1,
+            ?assertMatch(_ when Value >= 0 andalso Value < MaxValue, Value),
+
+            Tweak = random_tweak(),
+
+            Config = erlffx:config(Key, ValueLength, #{
+                radix => Radix, tweak => Tweak, value_length => ValueLength
+            }),
+
+            EncryptedValue = erlffx:encrypt(Config, Value),
+            DecryptedValue = erlffx:decrypt(Config, EncryptedValue),
+
+            % logger:notice("Key size ~p", [byte_size(Key)]),
+            % logger:notice("Radix ~p", [Radix]),
+            % logger:notice("TweakLength ~p", [byte_size(Tweak)]),
+            % logger:notice("ValueLength ~p", [ValueLength]),
+            % logger:notice("EncryptedValue ~p", [EncryptedValue]),
+            % logger:notice("DecryptedValue ~p", [DecryptedValue]),
+            % logger:notice("------------"),
+
+            ?assertEqual(Value, DecryptedValue)
+        end,
+        lists:seq(1, 1000)
+    ).
+
+random_key() ->
+    case rand:uniform(3) of
+        1 ->
+            crypto:strong_rand_bytes(16);
+        %
+        2 ->
+            crypto:strong_rand_bytes(24);
+        %
+        3 ->
+            crypto:strong_rand_bytes(32)
+    end.
+
+random_radix() ->
+    case rand:uniform(5) of
+        1 ->
+            1 + rand:uniform(99);
+        %
+        2 ->
+            100 + rand:uniform(900);
+        %
+        3 ->
+            1000 + rand:uniform(9000);
+        %
+        4 ->
+            10000 + rand:uniform(30000);
+        %
+        5 ->
+            30000 + rand:uniform(35535 - 1)
+    end.
+
+random_tweak() ->
+    case rand:uniform(4) of
+        1 ->
+            <<>>;
+        %
+        _ ->
+            Length = rand:uniform(50) - 1,
+            crypto:strong_rand_bytes(Length)
+    end.
+
+int_pow(Base, Exp) when Exp > 0 ->
+    Base * int_pow(Base, Exp - 1);
+int_pow(_, 0) ->
+    1.
